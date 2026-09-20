@@ -39,6 +39,8 @@ function stop(run, reason) {
   return run;
 }
 
+const stripAnsi = (text) => String(text).replace(/\u001b\[[0-9;]*m/g, '');
+
 const sh = (cmd, opts = {}) =>
   execSync(cmd, { encoding: 'utf8', cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 
@@ -154,18 +156,18 @@ async function execute(id) {
   console.log(`implemented\n${diffstat}`);
 
   try {
-    writeFileSync(`${artifacts}/checks.log`, sh('./scripts/check-app 2>&1', { env }));
+    writeFileSync(`${artifacts}/checks.log`, stripAnsi(sh('./scripts/check-app 2>&1', { env })));
     transition(run, 'checked');
     console.log('checked    all required checks passed');
   } catch (error) {
-    writeFileSync(`${artifacts}/checks.log`, String(error.stdout ?? error.message));
+    writeFileSync(`${artifacts}/checks.log`, stripAnsi(error.stdout ?? error.message));
     return stop(run, `a required check failed, see ${RUNS_DIR}/${run.id}/artifacts/checks.log`);
   }
 
   try {
     sh(`./scripts/record-journey ${run.spec.journey}`, { env });
   } catch (error) {
-    writeFileSync(`${artifacts}/record.log`, String(error.stdout ?? error.message));
+    writeFileSync(`${artifacts}/record.log`, stripAnsi(error.stdout ?? error.message));
     return stop(run, 'the recording failed');
   }
   const video = sh(`find ${artifacts} -name '*.webm' | head -1`).trim();
@@ -190,30 +192,62 @@ async function execute(id) {
   return publish(run.id);
 }
 
+function prBody(run) {
+  const checks = stripAnsi(readFileSync(run.artifacts.checks, 'utf8')).trim().split('\n').slice(-40).join('\n');
+  const body = [
+    `**Change**  ${run.spec.summary}`,
+    `**Request**  ${run.request}`,
+    `**Candidate**  \`${run.candidate.slice(0, 7)}\` from \`${run.baseCommit.slice(0, 7)}\``,
+    `**Run**  \`${run.id}\``,
+    ``,
+    `### Agreed with the requester`,
+    ...run.spec.acceptance.map((a) => `- [x] ${a}`),
+    ``,
+    `### Review focus`,
+    `Existing rows predate this change. Check the stored field, the read path, and reload behavior.`,
+    ...run.spec.unchanged.map((u) => `- must still hold: ${u}`),
+    ``,
+    `### Checks`,
+    `All required checks passed. Command: \`./scripts/check-app\``,
+    `<details><summary>Full output</summary>`,
+    ``,
+    '```',
+    checks,
+    '```',
+    ``,
+    `</details>`,
+    ``,
+    `### Demo video`,
+    run.artifacts.videoUrl
+      ? run.artifacts.videoUrl
+      : `Recorded at \`${run.artifacts.video.replace(`${HARNESS_HOME}/`, '')}\` on the machine that ran this. ` +
+        `Not yet hosted: the run was local.`,
+    ``,
+    `**Acceptance**  pending requester review`,
+  ].join('\n');
+  return body;
+}
+
 function publish(id) {
   const run = loadRun(id);
   if (!run.candidate) throw new Error(`run ${id} has no candidate commit`);
 
   sh(`git push -q -u origin ${run.branch}`);
-  const body = [
-    `**Request**  ${run.request}`,
-    ``,
-    `**Agreed**  ${run.spec.summary}`,
-    ...run.spec.acceptance.map((a) => `- [x] ${a}`),
-    ``,
-    `**Must not change**`,
-    ...run.spec.unchanged.map((u) => `- ${u}`),
-    ``,
-    `**Run**  \`${run.id}\`, from \`${run.baseCommit.slice(0, 7)}\``,
-    `**Candidate**  \`${run.candidate.slice(0, 7)}\``,
-    `**Checks**  passed. Video and logs are attached to the run record.`,
-  ].join('\n');
+  const body = prBody(run);
 
   const url = sh(
     `gh pr create --draft --title ${JSON.stringify(run.spec.summary)} --body ${JSON.stringify(body)}`,
   ).trim();
   transition(run, 'published', { pr: url });
   console.log(`published  ${url}`);
+  return run;
+}
+
+function accept(id) {
+  const run = loadRun(id);
+  transition(run, run.state, { accepted: { at: new Date().toISOString() } });
+  console.log(`accepted   ${run.id}`);
+  if (run.pr) console.log(`review     ${run.pr}`);
   return run;
 }
 
@@ -228,6 +262,8 @@ const commands = {
   answer: () => answer(rest[0], rest.slice(1)),
   execute: () => execute(rest[0]),
   publish: () => publish(rest[0]),
+  accept: () => accept(rest[0]),
+  preview: () => console.log(prBody(loadRun(rest[0]))),
   show: () => console.log(JSON.stringify(loadRun(rest[0]), null, 2)),
 };
 
@@ -237,6 +273,8 @@ if (values.help || !commands[command]) {
   node harness/run.mjs answer <run-id> "<a1>" "<a2>" ...
   node harness/run.mjs execute <run-id>
   node harness/run.mjs publish <run-id>
+  node harness/run.mjs accept <run-id>
+  node harness/run.mjs preview <run-id>
   node harness/run.mjs show <run-id>`);
   process.exit(values.help ? 0 : 1);
 }
