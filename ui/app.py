@@ -7,155 +7,161 @@ import streamlit as st
 
 HARNESS_HOME = Path(__file__).resolve().parent.parent
 RUNS_DIR = Path(os.environ.get("RUNS_DIR", HARNESS_HOME / "runs"))
-REPO = Path(os.environ.get("HARNESS_REPO", "")).expanduser()
+RECORD_REPO = os.environ.get("RECORD_REPO", "")
+MARKER = "<!-- run.json -->"
 
 STATE_LABELS = {
     "clarifying": ("Waiting on you", "orange"),
-    "clarified": ("Ready to run", "blue"),
-    "prepared": ("Running", "grey"),
-    "implemented": ("Running", "grey"),
-    "checked": ("Running", "grey"),
-    "recorded": ("Ready to review", "green"),
-    "published": ("Draft PR open", "green"),
+    "clarified": ("Waiting on you", "orange"),
+    "prepared": ("Building", "grey"),
+    "implemented": ("Building", "grey"),
+    "check-failed": ("Repairing", "grey"),
+    "repairing": ("Repairing", "grey"),
+    "checked": ("Building", "grey"),
+    "recorded": ("Building", "grey"),
+    "published": ("Ready to review", "green"),
     "stopped": ("Stopped", "red"),
 }
 
 
-def load_runs():
-    records = []
-    for path in sorted(RUNS_DIR.glob("*/run.json"), key=lambda p: p.stat().st_mtime, reverse=True):
-        records.append(json.loads(path.read_text()))
-    return records
-
-
-def load_run(run_id):
-    return json.loads((RUNS_DIR / run_id / "run.json").read_text())
-
-
-def harness(*args, log):
-    command = ["node", str(HARNESS_HOME / "harness" / "run.mjs"), *args]
-    env = {**os.environ, "HARNESS_REPO": str(REPO), "RUNS_DIR": str(RUNS_DIR)}
-    lines = []
-
-    process = subprocess.Popen(
-        command, cwd=HARNESS_HOME, env=env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1,
-    )
-    for line in process.stdout:
-        lines.append(line.rstrip())
-        log.code("\n".join(lines[-18:]), language=None)
-    process.wait()
-    return process.returncode
-
-
-def git(*args):
+def gh(*args):
     return subprocess.run(
-        ["git", "-C", str(REPO), *args], capture_output=True, text=True
-    ).stdout
+        ["gh", *args], capture_output=True, text=True, check=True
+    ).stdout.strip()
 
 
-st.set_page_config(page_title="Remote harness", page_icon="🛠", layout="wide")
+def harness(script, *args):
+    env = {**os.environ, "RECORD_REPO": RECORD_REPO, "RUNS_DIR": str(RUNS_DIR)}
+    return subprocess.run(
+        ["node", str(HARNESS_HOME / "harness" / script), *args],
+        cwd=HARNESS_HOME, env=env, capture_output=True, text=True, check=True,
+    ).stdout.strip()
 
-if not REPO.exists():
-    st.error("Set HARNESS_REPO to the application repository before starting the app.")
+
+def dispatch(workflow, **inputs):
+    args = ["workflow", "run", workflow, "--repo", RECORD_REPO]
+    for key, value in inputs.items():
+        args += ["-f", f"{key}={value}"]
+    gh(*args)
+
+
+def parse_record(body):
+    if MARKER not in body:
+        return None
+    block = body.split(MARKER, 1)[1]
+    start, end = block.find("```json"), block.rfind("```")
+    if start < 0 or end <= start:
+        return None
+    return json.loads(block[start + len("```json"):end])
+
+
+@st.cache_data(ttl=5)
+def load_runs():
+    issues = json.loads(
+        gh("issue", "list", "--repo", RECORD_REPO, "--label", "harness-run",
+           "--state", "all", "--limit", "30", "--json", "number,title,body")
+    )
+    runs = []
+    for issue in issues:
+        record = parse_record(issue["body"])
+        runs.append(record or {
+            "id": f"run-{issue['number']}",
+            "request": issue["title"],
+            "state": "clarifying",
+            "history": [],
+        })
+    return runs
+
+
+st.set_page_config(page_title="Ask for a change", page_icon="✳️", layout="centered")
+
+if not RECORD_REPO:
+    st.error("Set RECORD_REPO to the harness repository, as owner/repo.")
     st.stop()
 
+runs = load_runs()
+by_id = {run["id"]: run for run in runs}
+
 with st.sidebar:
-    st.subheader("Runs")
-    st.caption(f"repository: {REPO.name}")
-    runs = load_runs()
+    st.subheader("Your requests")
     if st.button("New request", use_container_width=True):
         st.session_state.pop("run_id", None)
-    for record in runs:
-        label, colour = STATE_LABELS.get(record["state"], (record["state"], "grey"))
-        if st.button(
-            f":{colour}[{label}] · {record['request'][:38]}",
-            key=record["id"],
-            use_container_width=True,
-        ):
-            st.session_state["run_id"] = record["id"]
+    for run in runs:
+        label, colour = STATE_LABELS.get(run["state"], (run["state"], "grey"))
+        if st.button(f":{colour}[{label}] · {run['request'][:38]}",
+                     key=run["id"], use_container_width=True):
+            st.session_state["run_id"] = run["id"]
 
 run_id = st.session_state.get("run_id")
 
 if not run_id:
-    st.title("Describe the change you need")
-    st.caption("Plain language. An engineer set the boundaries for this repository already.")
-    request = st.text_area("Request", placeholder="Let me mark important tasks and focus on those first", height=110)
+    st.title("What would you like changed?")
+    request = st.text_area("Describe it the way you would to a colleague.", height=120)
     if st.button("Send", type="primary", disabled=not request.strip()):
-        log = st.empty()
-        with st.spinner("Reading the repository and working out what to ask you"):
-            harness("clarify", request.strip(), log=log)
-        newest = load_runs()
-        if newest:
-            st.session_state["run_id"] = newest[0]["id"]
-            st.rerun()
+        new_id = harness("record.mjs", "open", request.strip())
+        dispatch("clarify.yml", run_id=new_id, request=request.strip())
+        st.session_state["run_id"] = new_id
+        load_runs.clear()
+        st.rerun()
     st.stop()
 
-run = load_run(run_id)
+run = by_id.get(run_id, {"state": "clarifying", "request": "", "history": []})
 label, colour = STATE_LABELS.get(run["state"], (run["state"], "grey"))
 
 st.title(run["request"])
-st.markdown(f":{colour}[**{label}**] &nbsp; `{run['id']}` &nbsp; from `{run['baseCommit'][:7]}`")
+st.markdown(f":{colour}[**{label}**]")
 
-if run["state"] == "clarifying":
-    st.subheader("A few questions first")
-    st.caption("Only the ones whose answers change what gets built.")
-    answers = []
-    with st.form("answers"):
-        for question in run["questions"]:
-            st.markdown(f"**{question['ask']}**")
-            st.caption(question["why"])
-            answers.append(st.text_input("Answer", key=question["id"], label_visibility="collapsed"))
-        submitted = st.form_submit_button("Agree the task", type="primary")
-    if submitted and all(a.strip() for a in answers):
-        log = st.empty()
-        with st.spinner("Turning your answers into an agreed task"):
-            harness("answer", run_id, *[a.strip() for a in answers], log=log)
+if st.button("Refresh"):
+    load_runs.clear()
+    st.rerun()
+
+questions = run.get("questions")
+spec = run.get("spec")
+
+if run["state"] == "clarifying" and not questions:
+    st.info("Reading the application to work out what to ask you.")
+
+elif run["state"] == "clarifying" and questions:
+    st.subheader("A few questions before anything is built")
+    for question in questions:
+        st.markdown(f"**{question['ask']}**")
+        st.caption(question["why"])
+    reply = st.text_area("Answer in your own words.", height=120)
+    if st.button("Send answers", type="primary", disabled=not reply.strip()):
+        dispatch("execute.yml", run_id=run_id, mode="answer", reply=reply.strip())
+        load_runs.clear()
         st.rerun()
 
 elif run["state"] == "clarified":
-    spec = run["spec"]
-    st.subheader(spec["summary"])
-    left, right = st.columns(2)
-    with left:
-        st.markdown("**This will be true when it is done**")
-        for item in spec["acceptance"]:
-            st.markdown(f"- {item}")
-    with right:
-        st.markdown("**This must not change**")
-        for item in spec["unchanged"]:
-            st.markdown(f"- {item}")
-    st.info(f"**Check**  {spec['check']}")
-    if st.button("Start the run", type="primary"):
-        log = st.empty()
-        with st.spinner("Running remotely. Implementing, checking, recording."):
-            harness("execute", run_id, log=log)
+    st.subheader("Here is what will be built")
+    st.markdown(spec["summary"])
+    for line in spec["acceptance"]:
+        st.markdown(f"- {line}")
+    st.caption("Unchanged: " + "; ".join(spec["unchanged"]))
+    if st.button("That is right, build it", type="primary"):
+        dispatch("execute.yml", run_id=run_id, mode="execute")
+        load_runs.clear()
+        st.rerun()
+
+elif run["state"] == "published":
+    st.subheader("Ready for you to look at")
+    st.markdown(f"The recording and the change are on the pull request: {run['pr']}")
+    if run.get("accepted"):
+        st.success("You accepted this. An engineer owns the merge.")
+    elif st.button("This is the behavior I wanted", type="primary"):
+        harness("record.mjs", "pull", run_id)
+        harness("run.mjs", "accept", run_id)
+        harness("record.mjs", "push", run_id)
+        load_runs.clear()
         st.rerun()
 
 elif run["state"] == "stopped":
-    st.error(run.get("reason", "the run stopped"))
-    checks = run.get("artifacts", {}).get("checks")
-    if checks and Path(checks).exists():
-        st.code(Path(checks).read_text()[-3000:], language=None)
+    st.error(run.get("reason", "The run stopped."))
+    st.caption("Nothing was opened for review. The evidence is on the run record.")
 
 else:
-    video = run.get("artifacts", {}).get("video")
-    if video and Path(video).exists():
-        st.subheader("What it does now")
-        st.video(str(video))
+    st.info("Building and checking the change.")
 
-    st.subheader("Does this do what you asked?")
-    accepted, changes = st.columns(2)
-    if accepted.button("Yes, this is the behavior I wanted", type="primary", use_container_width=True):
-        harness("accept", run_id, log=st.empty())
-        st.rerun()
-    if changes.button("Not quite, I want to change something", use_container_width=True):
-        st.info("Describe what is different and the next run starts from here.")
-
-    if run.get("accepted"):
-        st.success("You accepted this behavior. An engineer reviews the code and owns the merge.")
-
-    if run.get("pr"):
-        st.markdown(f"The engineering review is on GitHub: {run['pr']}")
-    else:
-        st.caption("No draft pull request yet: the repository has no remote configured.")
+with st.expander("Run record"):
+    st.caption(f"{RECORD_REPO}#{run_id.removeprefix('run-')}")
+    st.json(run, expanded=False)

@@ -1,0 +1,82 @@
+name: clarify
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: run id, as run-<issue number>
+        required: true
+      request:
+        description: what the stakeholder asked for
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  RECORD_REPO: ${{ github.repository }}
+  APP_REPO: ${{ vars.APP_REPO }}
+
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: harness
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ vars.APP_REPO }}
+          path: app
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - run: npm i -g @anthropic-ai/claude-code
+
+      - name: ask the questions
+        working-directory: harness
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HARNESS_REPO: ${{ github.workspace }}/app
+          RUNS_DIR: ${{ github.workspace }}/runs
+          RUN_ID: ${{ inputs.run_id }}
+          REQUEST: ${{ inputs.request }}
+        run: node harness/run.mjs clarify --id "$RUN_ID" "$REQUEST"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: record
+          path: runs/
+
+  route:
+    needs: work
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: harness
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: record
+          path: runs
+
+      - name: write the record
+        working-directory: harness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECORD_REPO: ${{ github.repository }}
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: node harness/record.mjs push "${{ inputs.run_id }}"

@@ -10,8 +10,10 @@ import { resolve } from 'node:path';
 const HARNESS_HOME = resolve(import.meta.dirname, '..');
 const RUNS_DIR = process.env.RUNS_DIR ?? `${HARNESS_HOME}/runs`;
 const REPO = resolve(process.env.HARNESS_REPO ?? process.cwd());
+const REPAIR_BUDGET = Number(process.env.REPAIR_BUDGET ?? 1);
 
 const runPath = (id) => `${RUNS_DIR}/${id}/run.json`;
+const artifactsDir = (id) => `${RUNS_DIR}/${id}/artifacts`;
 
 function loadRun(id) {
   if (!existsSync(runPath(id))) throw new Error(`no run record for ${id}`);
@@ -70,55 +72,99 @@ function claude(prompt, { json = false, edits = false } = {}) {
   return JSON.parse(match[0]);
 }
 
-function clarify(request) {
+function clarify(request, id) {
   const run = saveRun({
-    id: `run-${Date.now().toString(36)}-${randomUUID().slice(0, 4)}`,
+    id: id ?? `run-${Date.now().toString(36)}-${randomUUID().slice(0, 4)}`,
     request,
     state: 'clarifying',
     baseCommit: sh('git rev-parse HEAD').trim(),
+    repairsLeft: REPAIR_BUDGET,
     history: [],
     artifacts: {},
   });
 
-  const { questions } = claude(
+  const { questions, findings } = claude(
     `You are the intake step of an engineering harness for this repository.\n\n` +
       `A non-engineer asked for this change:\n"${request}"\n\n` +
-      `Read the repository to understand the current behavior. Ignore the harness/ directory entirely.\n` +
+      `Read the repository to understand the current behavior.\n` +
       `Ask ONLY the questions whose answers would change what gets built. Never more than three.\n` +
       `Each must be answerable by someone who does not read code.\n\n` +
-      `Reply with JSON only: {"questions":[{"id":"q1","ask":"...","why":"what changes based on the answer"}]}`,
+      `Also record what you learned, so a later step does not have to rediscover it.\n\n` +
+      `Reply with JSON only:\n` +
+      `{"questions":[{"id":"q1","ask":"...","why":"what changes based on the answer"}],` +
+      `"findings":[{"path":"file you read","note":"what it means for this change"}]}`,
     { json: true },
   );
 
-  transition(run, 'clarifying', { questions });
+  transition(run, 'clarifying', { questions, findings });
   console.log(`\nrun: ${run.id}\n`);
   for (const q of questions) console.log(`  ${q.id}. ${q.ask}\n      (${q.why})\n`);
-  console.log(`answer with:\n  node harness/run.mjs answer ${run.id} "a1" "a2" ...\n`);
+  for (const f of findings ?? []) console.log(`  found  ${f.path}  ${f.note}`);
   return run;
 }
 
-function answer(id, answers) {
+function answer(id, reply) {
   const run = loadRun(id);
-  run.answers = run.questions.map((q, i) => ({ ...q, answer: answers[i] ?? '' }));
 
   const spec = claude(
     `You are writing the agreed task for an engineering harness.\n\n` +
       `Request: "${run.request}"\n\n` +
-      `Clarifying exchange:\n` +
-      run.answers.map((a) => `Q: ${a.ask}\nA: ${a.answer}`).join('\n') +
-      `\n\nRead the repository, ignoring the harness/ directory. Write the agreed task as JSON only:\n` +
+      `You asked:\n` +
+      run.questions.map((q) => `${q.id}. ${q.ask}`).join('\n') +
+      `\n\nThey replied, in their own words:\n"${reply}"\n\n` +
+      `What intake already found in the repository:\n` +
+      (run.findings ?? []).map((f) => `  ${f.path}: ${f.note}`).join('\n') +
+      `\n\nMatch their reply to the questions. Where they did not answer one, choose the smaller change ` +
+      `and say so in the summary.\n\n` +
+      `Write the agreed task as JSON only:\n` +
       `{"summary":"one line","acceptance":["observable statements"],"unchanged":["behavior that must not change"],` +
-      `"check":"what the automated check must prove","journey":"kebab-case name for the recorded journey"}`,
+      `"check":"what the automated check must prove","journey":"kebab-case name for the recorded journey",` +
+      `"reviewFocus":"the one decision in this diff a reviewer must check, in a sentence"}`,
     { json: true },
   );
 
-  transition(run, 'clarified', { spec });
+  transition(run, 'clarified', { reply, spec });
   console.log(`\n${spec.summary}\n`);
   for (const a of spec.acceptance) console.log(`  + ${a}`);
   for (const u of spec.unchanged) console.log(`  = ${u}`);
   console.log(`\ncheck: ${spec.check}\njourney: ${spec.journey}\n`);
-  console.log(`execute with:\n  node harness/run.mjs execute ${run.id}\n`);
   return run;
+}
+
+function runChecks(run, env) {
+  const log = `${artifactsDir(run.id)}/checks.log`;
+  try {
+    writeFileSync(log, stripAnsi(sh('./scripts/check-app 2>&1', { env })));
+    return { passed: true, log };
+  } catch (error) {
+    writeFileSync(log, stripAnsi(error.stdout ?? error.message));
+    return { passed: false, log };
+  }
+}
+
+function recordJourney(run, env) {
+  const artifacts = artifactsDir(run.id);
+  try {
+    sh(`./scripts/record-journey ${run.spec.journey}`, { env });
+  } catch (error) {
+    writeFileSync(`${artifacts}/record.log`, stripAnsi(error.stdout ?? error.message));
+    return null;
+  }
+  const webm = sh(`find ${artifacts} -name '*.webm' | head -1`).trim();
+  if (!webm) return null;
+
+  const mp4 = `${artifacts}/demo.mp4`;
+  sh(`ffmpeg -y -loglevel error -i ${JSON.stringify(webm)} -c:v libx264 -pix_fmt yuv420p ${mp4}`);
+  return { webm, mp4 };
+}
+
+function commitCandidate(run) {
+  sh('git add -A');
+  sh(
+    `git -c user.email=harness@bharad.dev -c user.name="Remote Harness" commit -q -m ` +
+      JSON.stringify(run.spec.summary),
+  );
+  return sh('git rev-parse HEAD').trim();
 }
 
 async function execute(id) {
@@ -126,7 +172,7 @@ async function execute(id) {
   if (!run.spec) throw new Error(`run ${id} has no agreed spec yet`);
 
   const branch = `harness/${run.id}`;
-  const artifacts = `${RUNS_DIR}/${run.id}/artifacts`;
+  const artifacts = artifactsDir(run.id);
   const port = await freePort();
   const env = { ...process.env, PORT: String(port), ARTIFACTS_DIR: artifacts };
 
@@ -140,12 +186,15 @@ async function execute(id) {
       `Summary: ${run.spec.summary}\n` +
       `Acceptance:\n${run.spec.acceptance.map((a) => `  - ${a}`).join('\n')}\n` +
       `Must not change:\n${run.spec.unchanged.map((u) => `  - ${u}`).join('\n')}\n\n` +
-      `Also write two files:\n` +
+      `What intake already found:\n` +
+      (run.findings ?? []).map((f) => `  ${f.path}: ${f.note}`).join('\n') +
+      `\n\nAlso write two files:\n` +
       `  tests/${run.spec.journey}.spec.ts  a Playwright check proving: ${run.spec.check}\n` +
       `  journeys/${run.spec.journey}.journey.ts  a Playwright journey demonstrating the behavior on screen, ` +
       `with short waits so it is watchable, and no assertions.\n\n` +
       `Existing rows in the tasks table predate this change. Handle that explicitly.\n\n` +
-      `Hard limits: do not run the tests. Do not commit. Only edit files in this repository.`,
+      `Hard limits: do not run the tests. Do not commit. Do not touch .github/. ` +
+      `Only edit files in this repository.`,
     { edits: true },
   );
 
@@ -155,46 +204,63 @@ async function execute(id) {
   transition(run, 'implemented', { diffstat });
   console.log(`implemented\n${diffstat}`);
 
-  try {
-    writeFileSync(`${artifacts}/checks.log`, stripAnsi(sh('./scripts/check-app 2>&1', { env })));
-    transition(run, 'checked');
-    console.log('checked    all required checks passed');
-  } catch (error) {
-    writeFileSync(`${artifacts}/checks.log`, stripAnsi(error.stdout ?? error.message));
-    return stop(run, `a required check failed, see ${RUNS_DIR}/${run.id}/artifacts/checks.log`);
-  }
+  return finish(run, env);
+}
 
-  try {
-    sh(`./scripts/record-journey ${run.spec.journey}`, { env });
-  } catch (error) {
-    writeFileSync(`${artifacts}/record.log`, stripAnsi(error.stdout ?? error.message));
-    return stop(run, 'the recording failed');
-  }
-  const video = sh(`find ${artifacts} -name '*.webm' | head -1`).trim();
-  if (!video) return stop(run, 'the recording produced no video');
-  transition(run, 'recorded', { artifacts: { checks: `${artifacts}/checks.log`, video } });
-  console.log(`recorded   ${video}`);
-
-  sh('git add -A');
-  sh(
-    `git -c user.email=harness@bharad.dev -c user.name="Remote Harness" commit -q -m ` +
-      JSON.stringify(run.spec.summary),
-  );
-  const candidate = sh('git rev-parse HEAD').trim();
-  transition(run, 'recorded', { candidate });
-  console.log(`candidate  ${candidate.slice(0, 7)}`);
-
-  if (!sh('git remote').trim()) {
-    console.log(`\nno git remote configured, so nothing was pushed.`);
-    console.log(`publish later with:  node harness/run.mjs publish ${run.id}`);
+function finish(run, env) {
+  const checks = runChecks(run, env);
+  run.artifacts = { ...run.artifacts, checks: checks.log };
+  if (!checks.passed) {
+    transition(run, 'check-failed');
+    console.log(`check-failed  see ${checks.log}`);
+    console.log(`repairs left  ${run.repairsLeft}`);
     return run;
   }
-  return publish(run.id);
+  transition(run, 'checked');
+  console.log('checked    all required checks passed');
+
+  const video = recordJourney(run, env);
+  if (!video) return stop(run, 'the recording failed');
+
+  const candidate = commitCandidate(run);
+  transition(run, 'recorded', {
+    candidate,
+    artifacts: { ...run.artifacts, video: video.webm, mp4: video.mp4 },
+  });
+  console.log(`recorded   ${video.mp4}`);
+  console.log(`candidate  ${candidate.slice(0, 7)}`);
+  return run;
+}
+
+async function repair(id) {
+  const run = loadRun(id);
+  if (run.state !== 'check-failed') throw new Error(`run ${id} is not waiting on a repair`);
+  if (run.repairsLeft <= 0) return stop(run, 'the repair budget is spent');
+
+  const artifacts = artifactsDir(run.id);
+  const port = await freePort();
+  const env = { ...process.env, PORT: String(port), ARTIFACTS_DIR: artifacts };
+  const failure = readFileSync(run.artifacts.checks, 'utf8').trim().split('\n').slice(-60).join('\n');
+
+  transition(run, 'repairing', { repairsLeft: run.repairsLeft - 1 });
+  console.log(`repairing  ${run.repairsLeft} left after this attempt`);
+
+  claude(
+    `A required check failed on your implementation. Repair it.\n\n` +
+      `Summary: ${run.spec.summary}\n` +
+      `The check must prove: ${run.spec.check}\n\n` +
+      `Check output:\n${failure}\n\n` +
+      `Fix the implementation, not the check, unless the check itself is wrong.\n` +
+      `Hard limits: do not run the tests. Do not commit. Do not touch .github/.`,
+    { edits: true },
+  );
+
+  return finish(run, env);
 }
 
 function prBody(run) {
   const checks = stripAnsi(readFileSync(run.artifacts.checks, 'utf8')).trim().split('\n').slice(-40).join('\n');
-  const body = [
+  return [
     `**Change**  ${run.spec.summary}`,
     `**Request**  ${run.request}`,
     `**Candidate**  \`${run.candidate.slice(0, 7)}\` from \`${run.baseCommit.slice(0, 7)}\``,
@@ -204,7 +270,7 @@ function prBody(run) {
     ...run.spec.acceptance.map((a) => `- [x] ${a}`),
     ``,
     `### Review focus`,
-    `Existing rows predate this change. Check the stored field, the read path, and reload behavior.`,
+    run.spec.reviewFocus ?? 'Check the stored field, the read path, and reload behavior.',
     ...run.spec.unchanged.map((u) => `- must still hold: ${u}`),
     ``,
     `### Checks`,
@@ -218,25 +284,23 @@ function prBody(run) {
     `</details>`,
     ``,
     `### Demo video`,
-    run.artifacts.videoUrl
-      ? run.artifacts.videoUrl
-      : `Recorded at \`${run.artifacts.video.replace(`${HARNESS_HOME}/`, '')}\` on the machine that ran this. ` +
-        `Not yet hosted: the run was local.`,
+    run.artifacts.mp4,
     ``,
     `**Acceptance**  pending requester review`,
   ].join('\n');
-  return body;
 }
 
 function publish(id) {
   const run = loadRun(id);
   if (!run.candidate) throw new Error(`run ${id} has no candidate commit`);
 
+  const bodyFile = `${RUNS_DIR}/${run.id}/pr-body.md`;
+  writeFileSync(bodyFile, prBody(run));
   sh(`git push -q -u origin ${run.branch}`);
-  const body = prBody(run);
 
   const url = sh(
-    `gh pr create --draft --title ${JSON.stringify(run.spec.summary)} --body ${JSON.stringify(body)}`,
+    `gh pr create --draft --title ${JSON.stringify(run.spec.summary)} ` +
+      `--body-file ${JSON.stringify(bodyFile)} --attach ${JSON.stringify(run.artifacts.mp4)}`,
   ).trim();
   transition(run, 'published', { pr: url });
   console.log(`published  ${url}`);
@@ -253,14 +317,15 @@ function accept(id) {
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { help: { type: 'boolean', short: 'h' } },
+  options: { help: { type: 'boolean', short: 'h' }, id: { type: 'string' } },
 });
 const [command, ...rest] = positionals;
 
 const commands = {
-  clarify: () => clarify(rest.join(' ')),
-  answer: () => answer(rest[0], rest.slice(1)),
+  clarify: () => clarify(rest.join(' '), values.id),
+  answer: () => answer(rest[0], rest.slice(1).join(' ')),
   execute: () => execute(rest[0]),
+  repair: () => repair(rest[0]),
   publish: () => publish(rest[0]),
   accept: () => accept(rest[0]),
   preview: () => console.log(prBody(loadRun(rest[0]))),
@@ -269,9 +334,10 @@ const commands = {
 
 if (values.help || !commands[command]) {
   console.log(`usage (HARNESS_REPO=<path to the application repo>):
-  node harness/run.mjs clarify "<request>"
-  node harness/run.mjs answer <run-id> "<a1>" "<a2>" ...
+  node harness/run.mjs clarify [--id <run-id>] "<request>"
+  node harness/run.mjs answer <run-id> "<their reply>"
   node harness/run.mjs execute <run-id>
+  node harness/run.mjs repair <run-id>
   node harness/run.mjs publish <run-id>
   node harness/run.mjs accept <run-id>
   node harness/run.mjs preview <run-id>

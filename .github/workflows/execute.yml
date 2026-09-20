@@ -1,0 +1,233 @@
+name: execute
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: run id, as run-<issue number>
+        required: true
+      mode:
+        description: answer, execute, or repair
+        required: false
+        default: execute
+      reply:
+        description: the stakeholder reply, when the mode is answer
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      actions: read
+    outputs:
+      state: ${{ steps.result.outputs.state }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: harness
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ vars.APP_REPO }}
+          path: app
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: read the record
+        working-directory: harness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECORD_REPO: ${{ github.repository }}
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: node harness/record.mjs pull "${{ inputs.run_id }}"
+
+      - uses: actions/cache@v4
+        if: inputs.mode != 'answer'
+        with:
+          path: |
+            app/node_modules
+            ~/.cache/ms-playwright
+          key: app-${{ hashFiles('app/package-lock.json') }}
+
+      - name: set the application up
+        if: inputs.mode != 'answer'
+        working-directory: app
+        run: |
+          ./scripts/setup-app
+          npx playwright install --with-deps chromium
+
+      - run: npm i -g @anthropic-ai/claude-code
+
+      - name: fetch the failing candidate
+        if: inputs.mode == 'repair'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prior=$(node -e "console.log(require('${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json').actionsRunId)")
+          gh run download "$prior" --repo "${{ github.repository }}" -n record -D "${{ github.workspace }}/runs"
+
+      - name: restore the failing candidate
+        if: inputs.mode == 'repair'
+        working-directory: app
+        run: |
+          git fetch "${{ github.workspace }}/runs/${{ inputs.run_id }}/candidate.bundle" \
+            "harness/${{ inputs.run_id }}:harness/${{ inputs.run_id }}"
+          git checkout -q "harness/${{ inputs.run_id }}"
+
+      - name: run the agent
+        working-directory: harness
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HARNESS_REPO: ${{ github.workspace }}/app
+          RUNS_DIR: ${{ github.workspace }}/runs
+          MODE: ${{ inputs.mode }}
+          RUN_ID: ${{ inputs.run_id }}
+          REPLY: ${{ inputs.reply }}
+        run: node harness/run.mjs "$MODE" "$RUN_ID" "$REPLY"
+
+      - name: bundle the candidate
+        if: always() && inputs.mode != 'answer'
+        working-directory: app
+        run: |
+          git rev-parse --verify "harness/${{ inputs.run_id }}" >/dev/null 2>&1 || exit 0
+          git add -A
+          git diff --cached --quiet || git -c user.email=harness@bharad.dev -c user.name="Remote Harness" \
+            commit -q -m "wip: candidate failing checks"
+          git bundle create "${{ github.workspace }}/runs/${{ inputs.run_id }}/candidate.bundle" \
+            "harness/${{ inputs.run_id }}"
+
+      - name: stamp the run with this container
+        if: always()
+        run: |
+          node -e "
+            const path = '${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json';
+            const record = require(path);
+            record.actionsRunId = '${{ github.run_id }}';
+            require('fs').writeFileSync(path, JSON.stringify(record, null, 2));
+          "
+
+      - id: result
+        if: always()
+        working-directory: harness
+        env:
+          RUNS_DIR: ${{ github.workspace }}/runs
+          RECORD_REPO: ${{ github.repository }}
+        run: echo "state=$(node -e "console.log(require('${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json').state)")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: record
+          path: runs/
+
+  publish:
+    needs: work
+    if: needs.work.outputs.state == 'recorded'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: harness
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ vars.APP_REPO }}
+          path: app
+          fetch-depth: 0
+          token: ${{ secrets.APP_REPO_TOKEN }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: record
+          path: runs
+
+      - name: install a gh that can attach media
+        run: |
+          curl -fsSL https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz \
+            | sudo tar -xz --strip-components=2 -C /usr/local/bin gh_2.101.0_linux_amd64/bin/gh
+          gh --version
+
+      - name: open the draft pull request
+        working-directory: harness
+        env:
+          GH_TOKEN: ${{ secrets.APP_REPO_TOKEN }}
+          HARNESS_REPO: ${{ github.workspace }}/app
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: |
+          git -C "${{ github.workspace }}/app" fetch \
+            "${{ github.workspace }}/runs/${{ inputs.run_id }}/candidate.bundle" \
+            "harness/${{ inputs.run_id }}:harness/${{ inputs.run_id }}"
+          git -C "${{ github.workspace }}/app" checkout -q "harness/${{ inputs.run_id }}"
+          node harness/run.mjs publish "${{ inputs.run_id }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published
+          path: runs/
+
+  route:
+    needs: [work, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: harness
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.result == 'success' && 'published' || 'record' }}
+          path: runs
+
+      - name: write the record
+        working-directory: harness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECORD_REPO: ${{ github.repository }}
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: node harness/record.mjs push "${{ inputs.run_id }}"
+
+      - name: decide what happens next
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: |
+          record="${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json"
+          state=$(node -e "console.log(require('$record').state)")
+          left=$(node -e "console.log(require('$record').repairsLeft)")
+
+          case "$state" in
+            check-failed)
+              if [ "$left" -gt 0 ]; then
+                echo "check failed, ${left} repair attempts left, dispatching a repair"
+                gh workflow run execute.yml --repo "${{ github.repository }}" \
+                  -f run_id="${{ inputs.run_id }}" -f mode=repair
+              else
+                echo "check failed and the repair budget is spent, the run stops here"
+              fi
+              ;;
+            published) echo "published, waiting on the requester" ;;
+            stopped)   echo "stopped, evidence retained" ;;
+            *)         echo "state ${state} needs no dispatch" ;;
+          esac
