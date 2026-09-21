@@ -1,13 +1,17 @@
 {
   "id": "run-muaru9fo-79ee",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T04:55:48.536Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T04:56:37.767Z"
     }
   ],
   "artifacts": {},
@@ -45,5 +49,24 @@
       "path": "app/public/index.html + style.css",
       "note": "UI is a minimal single list with an add-task form; no existing sort/filter controls or priority styling (e.g., no star icon, no priority color coding) — these would need to be designed from scratch if requested."
     }
-  ]
+  ],
+  "reply": "A separate view, not re-sorting the main list. Just on and off, no levels. And it should stay important even after it's done.",
+  "spec": {
+    "summary": "Add an on/off 'important' flag to tasks, toggleable from the main list, with a separate view that shows only important tasks (including completed ones).",
+    "acceptance": [
+      "Each task in the main list has a toggle to mark/unmark it important, independent of its done state.",
+      "A separate view exists that lists only tasks currently marked important.",
+      "Marking a task done does not clear its important flag or remove it from the important view.",
+      "Toggling important updates the task via the API and persists across page reloads."
+    ],
+    "unchanged": [
+      "The main list continues to show all tasks in existing (by-id) order — importance does not resort it.",
+      "Existing done-toggle behavior (checkbox, PATCH, reload) is unaffected.",
+      "The add-task form is unchanged — importance cannot be set at creation time, only toggled afterward, matching the pattern for done."
+    ],
+    "check": "Automated check creates a task, marks it important via PATCH /api/tasks/:id, confirms it appears in the important view, marks it done, confirms it remains in the important view and still shows important=true, and confirms the main list order/content is unaffected by importance.",
+    "journey": "view-important-tasks",
+    "reviewFocus": "Confirm the important flag survives the done toggle (no code path clears 'important' when 'done' is set) and that the main list is filtered into a separate view rather than being re-sorted in place."
+  },
+  "actionsRunId": "35562700089"
 }
