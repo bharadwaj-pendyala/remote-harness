@@ -1,0 +1,7 @@
+.git
+node_modules
+.venv
+.env
+.chat-data
+runs
+__pycache__
