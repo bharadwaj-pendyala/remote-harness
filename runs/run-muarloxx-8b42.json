@@ -1,13 +1,17 @@
 {
   "id": "run-muarloxx-8b42",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T04:48:59.714Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T04:50:07.580Z"
     }
   ],
   "artifacts": {},
@@ -49,5 +53,27 @@
       "path": "tests/baseline.spec.ts + journeys/baseline.journey.ts",
       "note": "Existing tests check seeded tasks display and that completing a task (via checkbox) survives reload — any new sorting/important feature must not break these baseline behaviors"
     }
-  ]
+  ],
+  "reply": "A separate view, not re-sorting the main list. Just on and off, no levels. And it should stay important even after it's done.",
+  "spec": {
+    "summary": "Add a binary 'important' flag to tasks with a separate filtered view, independent of completion status",
+    "acceptance": [
+      "Each task row has a toggle (e.g. a star icon) to mark it important or not; it only has two states, no priority levels",
+      "A separate 'Important' view/filter control shows only tasks where important=true, without changing the main list's order or contents",
+      "The main task list continues to display all tasks in the existing insertion/id order; marking a task important does not move it within the main list",
+      "Marking a task done does not clear its important flag; a completed important task still appears in the Important view",
+      "Importance state persists across page reloads (stored in the database, not just client state)",
+      "Toggling importance does not change a task's done state, and toggling done does not change its important state"
+    ],
+    "unchanged": [
+      "GET /api/tasks returns all tasks in the same insertion/id order as before",
+      "POST /api/tasks still creates a task with done=0 (and important defaults to 0/false)",
+      "Existing checkbox-based completion behavior and its persistence across reload are unaffected",
+      "No re-sorting or auto-promotion of important tasks within the main list"
+    ],
+    "check": "An automated test creates/selects a task, marks it important via the new toggle, confirms it appears in the Important view while the main list order is unchanged, marks it done, and confirms it remains visible in the Important view and still shows importance after a reload",
+    "journey": "filter-important-tasks",
+    "reviewFocus": "Confirm 'important' is stored as its own persisted boolean column independent of 'done', and that the Important view is purely a filter that never mutates or reorders the main list's underlying task order."
+  },
+  "actionsRunId": "35562370705"
 }
