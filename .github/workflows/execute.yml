@@ -80,8 +80,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # the record is already on disk, so the prior artifacts land beside it, not over it
           prior=$(node -e "console.log(require('${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json').actionsRunId)")
-          gh run download "$prior" --repo "${{ github.repository }}" -n record -D "${{ github.workspace }}/runs"
+          gh run download "$prior" --repo "${{ github.repository }}" -n record -D "${{ github.workspace }}/prior"
+          cp -r "${{ github.workspace }}/prior/${{ inputs.run_id }}/artifacts" \
+                "${{ github.workspace }}/runs/${{ inputs.run_id }}/" 2>/dev/null || true
+          cp "${{ github.workspace }}/prior/${{ inputs.run_id }}/candidate.bundle" \
+             "${{ github.workspace }}/runs/${{ inputs.run_id }}/" 
 
       - name: restore the failing candidate
         if: inputs.mode == 'repair'
