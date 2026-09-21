@@ -8,9 +8,10 @@ import streamlit as st
 HARNESS_HOME = Path(__file__).resolve().parent.parent
 RUNS_DIR = Path(os.environ.get("RUNS_DIR", HARNESS_HOME / "runs"))
 RECORD_REPO = os.environ.get("RECORD_REPO", "")
-MARKER = "<!-- run.json -->"
+RECORD_BRANCH = os.environ.get("RECORD_BRANCH", "harness-state")
 
 STATE_LABELS = {
+    "queued": ("Starting", "grey"),
     "clarifying": ("Waiting on you", "orange"),
     "clarified": ("Waiting on you", "orange"),
     "prepared": ("Building", "grey"),
@@ -33,7 +34,12 @@ def gh(*args):
 
 
 def harness(script, *args):
-    env = {**os.environ, "RECORD_REPO": RECORD_REPO, "RUNS_DIR": str(RUNS_DIR)}
+    env = {
+        **os.environ,
+        "RECORD_REPO": RECORD_REPO,
+        "RECORD_BRANCH": RECORD_BRANCH,
+        "RUNS_DIR": str(RUNS_DIR),
+    }
     return subprocess.run(
         ["node", str(HARNESS_HOME / "harness" / script), *args],
         cwd=HARNESS_HOME, env=env, capture_output=True, text=True, check=True,
@@ -47,32 +53,10 @@ def dispatch(workflow, **inputs):
     gh(*args)
 
 
-def parse_record(body):
-    if MARKER not in body:
-        return None
-    block = body.split(MARKER, 1)[1]
-    start, end = block.find("```json"), block.rfind("```")
-    if start < 0 or end <= start:
-        return None
-    return json.loads(block[start + len("```json"):end])
-
-
 @st.cache_data(ttl=5)
 def load_runs():
-    issues = json.loads(
-        gh("issue", "list", "--repo", RECORD_REPO, "--label", "harness-run",
-           "--state", "all", "--limit", "30", "--json", "number,title,body")
-    )
-    runs = []
-    for issue in issues:
-        record = parse_record(issue["body"])
-        runs.append(record or {
-            "id": f"run-{issue['number']}",
-            "request": issue["title"],
-            "state": "clarifying",
-            "history": [],
-        })
-    return runs
+    runs = json.loads(harness("record.mjs", "list") or "[]")
+    return sorted(runs, key=lambda run: run["id"], reverse=True)
 
 
 st.set_page_config(page_title="Ask for a change", page_icon="✳️", layout="centered")
@@ -165,5 +149,5 @@ else:
     st.info("Building and checking the change.")
 
 with st.expander("Run record"):
-    st.caption(f"{RECORD_REPO}#{run_id.removeprefix('run-')}")
+    st.caption(f"{RECORD_REPO} · {RECORD_BRANCH} · runs/{run_id}.json")
     st.json(run, expanded=False)

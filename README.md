@@ -12,9 +12,11 @@ Everything talks to the run record. Nothing talks to anything else.
 - **Request interface** `ui/app.py`. Captures the request, shows the questions,
   takes the reply, shows state in the requester's language, hands back the pull
   request. It never runs the agent.
-- **Run record** one GitHub issue per run in this repository. State, the agreed
-  spec, history, and artifact paths. It is not a file in the application
-  repository, so a checkout cannot delete it.
+- **Run record** `runs/<id>.json` on the orphan `harness-state` branch of this
+  repository. Written with `createCommitOnBranch(expectedHeadOid)`, so a stale
+  write is rejected rather than silently merged. Every transition is a commit,
+  so the log is the history. It is never checked out into the tree the agent
+  edits.
 - **Worker** a GitHub Actions job. Created for one stage, destroyed after. Holds
   no credential that can write to the application repository.
 - **Publisher** a separate job that holds the only write token. Pushes the

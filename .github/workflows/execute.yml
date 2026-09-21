@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: read
       actions: read
     outputs:
       state: ${{ steps.result.outputs.state }}
@@ -183,8 +182,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      issues: write
+      contents: write
       actions: write
     steps:
       - uses: actions/checkout@v5
