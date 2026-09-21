@@ -1,7 +1,49 @@
 {
   "id": "run-muaru9fo-79ee",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "queued",
-  "history": [],
-  "artifacts": {}
+  "state": "clarifying",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarifying",
+      "at": "2026-09-21T04:55:48.536Z"
+    }
+  ],
+  "artifacts": {},
+  "questions": [
+    {
+      "id": "q1",
+      "ask": "Should marking a task important just be a simple on/off flag (like a star), or do you want multiple levels such as High/Medium/Low priority?",
+      "why": "Determines whether we add a single 'important' checkbox/star (like the existing done checkbox) or a priority field with several options, which changes the UI controls and the data stored for each task."
+    },
+    {
+      "id": "q2",
+      "ask": "When you say 'focus on those first', do you want important tasks to simply float to the top of the same list, or do you want a way to hide/filter out the non-important tasks so only important ones show?",
+      "why": "Decides whether we just re-sort the existing single list (important tasks first) or add a filter/toggle view that hides everything else."
+    },
+    {
+      "id": "q3",
+      "ask": "Should you be able to mark a task important right when you create it, or only after it's already on the list (similar to how you check things off today)?",
+      "why": "Determines whether the 'Add a task' form needs a new important checkbox, or whether importance is only set afterward via a control on each existing task row."
+    }
+  ],
+  "findings": [
+    {
+      "path": "app/db/seed.js",
+      "note": "Tasks table currently only has id, title, done — no concept of importance/priority exists yet; a schema change (new column) is required."
+    },
+    {
+      "path": "app/server.js",
+      "note": "API is minimal: GET /api/tasks (returns all, ordered by id), POST /api/tasks (title only), PATCH /api/tasks/:id (currently only updates 'done'). PATCH would need to accept an 'important' field, and GET/sort logic would need to change if we want important tasks to float to top or be filterable."
+    },
+    {
+      "path": "app/public/app.js",
+      "note": "Client renders tasks as plain list items with a done checkbox; toggling done just PATCHes and reloads the full list. Adding importance would follow the same pattern (new checkbox/star per item, PATCH on change) plus possibly client-side or server-side sort/filter logic."
+    },
+    {
+      "path": "app/public/index.html + style.css",
+      "note": "UI is a minimal single list with an add-task form; no existing sort/filter controls or priority styling (e.g., no star icon, no priority color coding) — these would need to be designed from scratch if requested."
+    }
+  ]
 }
