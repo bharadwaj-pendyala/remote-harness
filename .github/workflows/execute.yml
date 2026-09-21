@@ -241,7 +241,7 @@ jobs:
           left=$(node -e "console.log(require('$record').repairsLeft)")
 
           case "$state" in
-            check-failed|review-failed)
+            check-failed|record-failed|review-failed)
               if [ "$left" -gt 0 ]; then
                 echo "${state}, ${left} repair attempts left, dispatching a repair"
                 gh workflow run execute.yml --repo "${{ github.repository }}" \

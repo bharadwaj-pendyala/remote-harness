@@ -144,10 +144,12 @@ function runChecks(run, env) {
 
 function recordJourney(run, env) {
   const artifacts = artifactsDir(run.id);
+  const log = `${artifacts}/record.log`;
   try {
     sh(`./scripts/record-journey ${run.spec.journey}`, { env });
   } catch (error) {
-    writeFileSync(`${artifacts}/record.log`, stripAnsi(error.stdout ?? error.message));
+    writeFileSync(log, stripAnsi(error.stdout ?? error.message));
+    run.artifacts = { ...run.artifacts, record: log };
     return null;
   }
   const webm = sh(`find ${artifacts} -name '*.webm' | head -1`).trim();
@@ -191,7 +193,9 @@ async function execute(id) {
       `\n\nAlso write two files:\n` +
       `  tests/${run.spec.journey}.spec.ts  a Playwright check proving: ${run.spec.check}\n` +
       `  journeys/${run.spec.journey}.journey.ts  a Playwright journey demonstrating the behavior on screen, ` +
-      `with short waits so it is watchable, and no assertions.\n\n` +
+      `with short waits so it is watchable, and no assertions.\n` +
+      `Playwright runs in strict mode. Every locator in both files must resolve to exactly one element, ` +
+      `so prefer an exact name, a test id, or a scoped parent over a bare role and label.\n\n` +
       `Existing rows in the tasks table predate this change. Handle that explicitly.\n\n` +
       `Hard limits: do not run the tests. Do not commit. Do not touch .github/. ` +
       `Only edit files in this repository.`,
@@ -220,7 +224,12 @@ function finish(run, env) {
   console.log('checked    all required checks passed');
 
   const video = recordJourney(run, env);
-  if (!video) return stop(run, 'the recording failed');
+  if (!video) {
+    transition(run, 'record-failed');
+    console.log(`record-failed  see ${artifactsDir(run.id)}/record.log`);
+    console.log(`repairs left   ${run.repairsLeft}`);
+    return run;
+  }
 
   const candidate = commitCandidate(run);
   transition(run, 'recorded', {
@@ -235,7 +244,7 @@ function finish(run, env) {
 
 async function repair(id) {
   const run = loadRun(id);
-  if (!['check-failed', 'review-failed'].includes(run.state)) {
+  if (!['check-failed', 'record-failed', 'review-failed'].includes(run.state)) {
     throw new Error(`run ${id} is not waiting on a repair`);
   }
   if (run.repairsLeft <= 0) return stop(run, 'the repair budget is spent');
@@ -244,15 +253,22 @@ async function repair(id) {
   const port = await freePort();
   const env = { ...process.env, PORT: String(port), ARTIFACTS_DIR: artifacts };
 
-  const complaint =
-    run.state === 'check-failed'
-      ? `A required check failed.\n\nCheck output:\n` +
-        readFileSync(run.artifacts.checks, 'utf8').trim().split('\n').slice(-60).join('\n')
-      : `A reviewer refused to merge this.\n\n` +
-        run.review
-          .filter((f) => f.severity === 'blocking')
-          .map((f) => `  ${f.path}: ${f.claim}\n    ${f.why}`)
-          .join('\n');
+  const tail = (path) => readFileSync(path, 'utf8').trim().split('\n').slice(-60).join('\n');
+
+  const complaint = {
+    'check-failed': () => `A required check failed.\n\nCheck output:\n${tail(run.artifacts.checks)}`,
+    'record-failed': () =>
+      `The checks passed, but recording the journey failed, so there is no video.\n\n` +
+      `Fix journeys/${run.spec.journey}.journey.ts only. Do not change the implementation.\n` +
+      `Playwright runs in strict mode, so every locator must resolve to exactly one element.\n\n` +
+      `Recording output:\n${tail(run.artifacts.record)}`,
+    'review-failed': () =>
+      `A reviewer refused to merge this.\n\n` +
+      run.review
+        .filter((f) => f.severity === 'blocking')
+        .map((f) => `  ${f.path}: ${f.claim}\n    ${f.why}`)
+        .join('\n'),
+  }[run.state]();
 
   transition(run, 'repairing', { repairsLeft: run.repairsLeft - 1 });
   console.log(`repairing  ${run.repairsLeft} left after this attempt`);
