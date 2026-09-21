@@ -1,7 +1,7 @@
 {
   "id": "run-muatladr-6d92",
   "request": "Show me how many tasks I still have left to do",
-  "state": "clarified",
+  "state": "check-failed",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
@@ -12,9 +12,23 @@
     {
       "state": "clarified",
       "at": "2026-09-21T05:46:03.524Z"
+    },
+    {
+      "state": "prepared",
+      "at": "2026-09-21T05:47:01.508Z"
+    },
+    {
+      "state": "implemented",
+      "at": "2026-09-21T05:48:45.187Z"
+    },
+    {
+      "state": "check-failed",
+      "at": "2026-09-21T05:48:54.159Z"
     }
   ],
-  "artifacts": {},
+  "artifacts": {
+    "checks": "/home/runner/work/remote-harness/remote-harness/runs/run-muatladr-6d92/artifacts/checks.log"
+  },
   "questions": [
     {
       "id": "q1",
@@ -63,5 +77,8 @@
     "journey": "remaining-tasks-count",
     "reviewFocus": "Confirm the remaining count is derived from the same fetched tasks array (done === 0) rather than a new/duplicated data source, and that it recalculates on every render so it never drifts from the visible list."
   },
-  "actionsRunId": "35565765823"
+  "actionsRunId": "35565816204",
+  "branch": "harness/run-muatladr-6d92",
+  "port": 39395,
+  "diffstat": "journeys/remaining-tasks-count.journey.ts | 14 +++++++++\n public/app.js                             |  3 ++\n public/index.html                         |  1 +\n public/style.css                          |  2 ++\n tests/remaining-tasks-count.spec.ts       | 49 +++++++++++++++++++++++++++++++\n 5 files changed, 69 insertions(+)"
 }
