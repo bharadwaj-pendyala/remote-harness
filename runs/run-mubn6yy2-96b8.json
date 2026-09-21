@@ -1,7 +1,45 @@
 {
   "id": "run-mubn6yy2-96b8",
   "request": "i want to make a change to how we perceive important tasks. How does important tasks work right now?",
-  "state": "queued",
-  "history": [],
-  "artifacts": {}
+  "state": "clarifying",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarifying",
+      "at": "2026-09-21T19:33:23.026Z"
+    }
+  ],
+  "artifacts": {},
+  "questions": [
+    {
+      "id": "q1",
+      "ask": "Right now there's no concept of \"important\" at all — every task just has a title and a done/not-done checkbox. Should we add a simple on/off \"important\" flag (like a star you toggle), or something with levels (e.g. low/medium/high priority)?",
+      "why": "Determines whether we add a single boolean column and star toggle, or a multi-level priority field with a picker UI — very different amount of work and UI design."
+    },
+    {
+      "id": "q2",
+      "ask": "Once a task is marked important, what should actually happen to it in the list — should it just get a visual marker (like a star icon) next to it, or should it move/sort to the top of the list, or both?",
+      "why": "Determines whether we need to change the sort order returned by the app in addition to adding a visual indicator."
+    },
+    {
+      "id": "q3",
+      "ask": "Should there be a way to view only the important tasks (a filter or separate view), or is showing them marked within the single existing list enough for now?",
+      "why": "Determines whether we need to add filter controls/UI beyond the existing single task list page."
+    }
+  ],
+  "findings": [
+    {
+      "path": "db/seed.js",
+      "note": "Tasks table has only id, title, done — no importance/priority column exists today."
+    },
+    {
+      "path": "server.js",
+      "note": "API is minimal: GET/POST /api/tasks and PATCH /api/tasks/:id (only toggles done). No importance field is read, written, or used for sorting (list is ordered by id)."
+    },
+    {
+      "path": "public/app.js and public/index.html",
+      "note": "UI is a single unstyled list with a checkbox and title per task; no priority/star controls or filters exist anywhere in the app."
+    }
+  ]
 }
