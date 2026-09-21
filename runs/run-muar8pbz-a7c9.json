@@ -1,13 +1,17 @@
 {
   "id": "run-muar8pbz-a7c9",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T04:39:24.640Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T04:43:16.358Z"
     }
   ],
   "artifacts": {},
@@ -45,5 +49,26 @@
       "path": "app/public/index.html / style.css",
       "note": "Minimal markup: just a form and a <ul> for tasks; no existing star/priority UI pattern to reuse."
     }
-  ]
+  ],
+  "reply": "A separate view, not re-sorting the main list. Just on and off, no levels. And it should stay important even after it's done.",
+  "spec": {
+    "summary": "Add an on/off 'important' flag to tasks, toggleable per task, with a separate Important view listing only those tasks (main list stays unsorted and unchanged); the flag persists after a task is completed.",
+    "acceptance": [
+      "Each task in the main list has a toggle control to mark/unmark it important.",
+      "Toggling a task's important flag does not change its position or the order of the main list.",
+      "A separate view (e.g. an 'Important' tab/page) shows only tasks currently marked important.",
+      "Marking a task done does not clear its important flag, and it remains visible in the Important view after completion.",
+      "Unmarking important removes the task from the Important view without changing its done state.",
+      "Refreshing the page preserves each task's important flag (persisted server-side)."
+    ],
+    "unchanged": [
+      "Main list task rendering order/sorting.",
+      "Existing done/checkbox toggle behavior and its API contract for the 'done' field.",
+      "Existing task creation flow."
+    ],
+    "check": "Automated check must prove: PATCH toggling 'important' persists the flag in the database; GET of the main task list returns tasks in the same order regardless of important status; a request scoped to important tasks returns exactly the subset with important=true; toggling 'done' on an important task leaves important=true afterward.",
+    "journey": "mark-tasks-important",
+    "reviewFocus": "Confirm the PATCH /api/tasks/:id handler never resets 'important' to false as a side effect of updating 'done' (completing a task must not silently clear its important mark)."
+  },
+  "actionsRunId": "35562015176"
 }
