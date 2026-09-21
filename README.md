@@ -36,7 +36,7 @@ durable because the record and the trigger outlive it.
 
 ## Running a stage by hand
 
-    export HARNESS_REPO=../harness-demo
+    export HARNESS_REPO=../todo-app
     node harness/run.mjs clarify "let me mark important tasks"
     node harness/run.mjs answer <run-id> "a separate view, and it should stick"
     node harness/run.mjs execute <run-id>
