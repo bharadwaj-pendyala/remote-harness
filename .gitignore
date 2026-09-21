@@ -4,4 +4,3 @@ runs/
 .chat-data/
 .env
 __pycache__/
-coverage/

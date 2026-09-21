@@ -99,24 +99,16 @@ the candidate and evidence to a separate publishing job. Terminal failures and
 spent repair budgets are persisted as `stopped`. The UI returns the draft PR and
 lets the stakeholder accept its behavior without merging it.
 
-## Demo and verification
+## Demo
 
 Use the [todo-app demo script](https://github.com/bharadwaj-pendyala/todo-app):
 ask whether Important exists, ask for source evidence, request a persistent star
 without filtering or sorting, refine the spec, then approve it. Verify reload,
 completion, and unchanged ordering in the generated checks and recording.
 
-```sh
-npm test
-npm run test:coverage
-.venv/bin/python -m unittest discover -s test -p 'test_*.py'
-```
-
-Tests use fake SDK and GitHub boundaries, a real temporary Git repository, a
-local HTTP server, and Streamlit's AppTest. They do not consume model credits or
-dispatch workflows. A live rehearsal additionally requires Claude credentials,
-the workflow revision on GitHub, the repository variable and secrets, and a
-real approved run. Do not present a prepared PR as evidence of that new path.
+A live rehearsal requires Claude credentials, the workflow revision on GitHub,
+the repository variable and secrets, and a real approved run. Do not present a
+prepared PR as evidence of that new path.
 
 Legacy workflow-driven intake remains at `ui/legacy_app.py`, `clarify.yml`, and
 `execute.yml` mode `answer`. It requires `RECORD_REPO`, GitHub CLI credentials,
