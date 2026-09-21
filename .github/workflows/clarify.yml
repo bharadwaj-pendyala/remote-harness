@@ -1,4 +1,5 @@
 name: clarify
+run-name: clarify · ${{ inputs.run_id }}
 
 on:
   workflow_dispatch:
