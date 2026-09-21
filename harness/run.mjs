@@ -156,8 +156,13 @@ function recordJourney(run, env) {
   if (!webm) return null;
 
   const mp4 = `${artifacts}/demo.mp4`;
-  sh(`ffmpeg -y -loglevel error -i ${JSON.stringify(webm)} -c:v libx264 -pix_fmt yuv420p ${mp4}`);
-  return { webm, mp4 };
+  try {
+    sh(`ffmpeg -y -loglevel error -i ${JSON.stringify(webm)} -c:v libx264 -pix_fmt yuv420p ${mp4}`);
+    return { webm, mp4 };
+  } catch (error) {
+    console.log(`recorded   no H.264 encode, attaching the webm instead (${error.message.split('\n')[0]})`);
+    return { webm, mp4: webm };
+  }
 }
 
 function commitCandidate(run) {

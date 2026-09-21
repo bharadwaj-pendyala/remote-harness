@@ -58,6 +58,10 @@ jobs:
             ~/.cache/ms-playwright
           key: app-${{ hashFiles('app/package-lock.json') }}
 
+      - name: install the video encoder
+        if: inputs.mode != 'answer'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: set the application up
         if: inputs.mode != 'answer'
         working-directory: app
