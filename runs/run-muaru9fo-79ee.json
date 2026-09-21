@@ -1,7 +1,7 @@
 {
   "id": "run-muaru9fo-79ee",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarified",
+  "state": "stopped",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
@@ -12,6 +12,10 @@
     {
       "state": "clarified",
       "at": "2026-09-21T04:56:37.767Z"
+    },
+    {
+      "state": "stopped",
+      "at": "2026-09-21T05:04:22.712Z"
     }
   ],
   "artifacts": {},
@@ -68,5 +72,6 @@
     "journey": "view-important-tasks",
     "reviewFocus": "Confirm the important flag survives the done toggle (no code path clears 'important' when 'done' is set) and that the main list is filtered into a separate view rather than being re-sorted in place."
   },
-  "actionsRunId": "35562700089"
+  "actionsRunId": "35562700089",
+  "reason": "the execute stage failed, see the workflow log"
 }
