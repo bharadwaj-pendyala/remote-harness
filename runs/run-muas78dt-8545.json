@@ -1,7 +1,49 @@
 {
   "id": "run-muas78dt-8545",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "queued",
-  "history": [],
-  "artifacts": {}
+  "state": "clarifying",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarifying",
+      "at": "2026-09-21T05:05:47.271Z"
+    }
+  ],
+  "artifacts": {},
+  "questions": [
+    {
+      "id": "q1",
+      "ask": "Should marking a task \"important\" be a simple on/off star (important or not), or do you need multiple priority levels like High/Medium/Low?",
+      "why": "Determines whether we add a single yes/no flag or a multi-level priority field, which changes both the data stored per task and the marking control shown in the UI."
+    },
+    {
+      "id": "q2",
+      "ask": "Should important tasks just move to the top of your existing task list, or would you rather have a separate view/tab that shows only important tasks?",
+      "why": "Determines whether we just re-sort the single list or build a new filtered view, which is a materially different amount of UI work."
+    },
+    {
+      "id": "q3",
+      "ask": "Once you check off an important task as done, should it stay pinned near the top, or drop down with the other completed tasks?",
+      "why": "Determines the sort/ordering rule (important-and-not-done first, vs. important always first) so finished work doesn't clutter the top of your focus list."
+    }
+  ],
+  "findings": [
+    {
+      "path": "app/db/seed.js",
+      "note": "Tasks table has only id, title, done (0/1). No 'important' or priority column exists yet; adding one requires a schema/migration change here and wherever tasks.db is created."
+    },
+    {
+      "path": "app/server.js",
+      "note": "GET /api/tasks returns all tasks ordered by id (insertion order) with no sorting logic; PATCH /api/tasks/:id only accepts updating 'done'. Both would need to accept/expose an 'important' field and support reordering by importance."
+    },
+    {
+      "path": "app/public/app.js",
+      "note": "Client renders tasks in the order the API returns them, with a checkbox for done and no other controls. Adding an importance toggle means adding a new control (e.g. star button) per list item and reflecting it visually."
+    },
+    {
+      "path": "app/public/style.css",
+      "note": "Only styling hook currently is 'li.done' for strikethrough; no styling exists for importance/priority, so a new visual treatment (e.g. highlight or badge) would need to be defined."
+    }
+  ]
 }
