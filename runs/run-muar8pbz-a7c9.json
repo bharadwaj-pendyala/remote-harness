@@ -1,7 +1,7 @@
 {
   "id": "run-muar8pbz-a7c9",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarified",
+  "state": "stopped",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
@@ -12,6 +12,10 @@
     {
       "state": "clarified",
       "at": "2026-09-21T04:43:16.358Z"
+    },
+    {
+      "state": "stopped",
+      "at": "2026-09-21T04:46:41.204Z"
     }
   ],
   "artifacts": {},
@@ -70,5 +74,6 @@
     "journey": "mark-tasks-important",
     "reviewFocus": "Confirm the PATCH /api/tasks/:id handler never resets 'important' to false as a side effect of updating 'done' (completing a task must not silently clear its important mark)."
   },
-  "actionsRunId": "35562015176"
+  "actionsRunId": "35562015176",
+  "reason": "the execute stage failed, see the workflow log"
 }
