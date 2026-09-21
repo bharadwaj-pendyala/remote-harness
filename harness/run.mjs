@@ -306,15 +306,25 @@ function review(run) {
       `appears to satisfy. Do not restate what the diff does. Do not praise it.\n` +
       `Call a finding blocking only when a reviewer would refuse to merge.\n\n` +
       `Reply with JSON only:\n` +
-      `{"findings":[{"severity":"blocking|note","path":"file","claim":"what is wrong",` +
-      `"why":"the case against it in one sentence"}]}`,
+      `{"findings":[{"severity":"blocking","path":"file","claim":"what is wrong",` +
+      `"why":"the case against it in one sentence"}]}\n` +
+      `Every finding needs all four fields. severity is exactly "blocking" or "note". ` +
+      `Return {"findings":[]} when you have no case against the diff.`,
     { json: true },
   );
 
-  const blocking = findings.filter((f) => f.severity === 'blocking');
-  transition(run, blocking.length ? 'review-failed' : 'reviewed', { review: findings });
+  // the reviewer is a model, so treat its shape as untrusted
+  const normalised = (findings ?? []).map((f) => ({
+    severity: f?.severity === 'blocking' ? 'blocking' : 'note',
+    path: f?.path ?? 'unknown',
+    claim: f?.claim ?? '',
+    why: f?.why ?? '',
+  }));
 
-  for (const f of findings) console.log(`  ${f.severity.padEnd(8)} ${f.path}  ${f.claim}`);
+  const blocking = normalised.filter((f) => f.severity === 'blocking');
+  transition(run, blocking.length ? 'review-failed' : 'reviewed', { review: normalised });
+
+  for (const f of normalised) console.log(`  ${f.severity.padEnd(8)} ${f.path}  ${f.claim}`);
   console.log(blocking.length ? `review-failed  ${blocking.length} blocking` : 'reviewed   nothing blocking');
   return run;
 }
