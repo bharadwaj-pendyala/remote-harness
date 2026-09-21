@@ -11,6 +11,10 @@ on:
         description: answer, execute, or repair
         required: false
         default: execute
+      fast:
+        description: skip the H.264 encode and review on a faster model
+        required: false
+        default: 'false'
       reply:
         description: the stakeholder reply, when the mode is answer
         required: false
@@ -59,7 +63,7 @@ jobs:
           key: app-${{ hashFiles('app/package-lock.json') }}
 
       - name: install the video encoder
-        if: inputs.mode != 'answer'
+        if: inputs.mode != 'answer' && inputs.fast != 'true'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - name: set the application up
@@ -97,6 +101,8 @@ jobs:
           MODE: ${{ inputs.mode }}
           RUN_ID: ${{ inputs.run_id }}
           REPLY: ${{ inputs.reply }}
+          ENCODE: ${{ inputs.fast == 'true' && 'off' || 'on' }}
+          REVIEW_MODEL: ${{ vars.REVIEW_MODEL || 'haiku' }}
         run: |
           # an API key, when present, overrides the subscription token
           if [ -n "$ANTHROPIC_API_KEY" ]; then unset CLAUDE_CODE_OAUTH_TOKEN; else unset ANTHROPIC_API_KEY; fi
@@ -152,22 +158,21 @@ jobs:
         with:
           repository: ${{ vars.APP_REPO }}
           path: app
-          fetch-depth: 0
+          fetch-depth: 1
           token: ${{ secrets.APP_REPO_TOKEN }}
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
 
       - uses: actions/download-artifact@v4
         with:
           name: record
           path: runs
 
-      - name: install a gh that can attach media
+      - name: make sure gh can attach media
         run: |
-          curl -fsSL https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz \
-            | sudo tar -xz --strip-components=2 -C /usr/local/bin gh_2.101.0_linux_amd64/bin/gh
+          have=$(gh --version | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          if [ "$(printf '%s\n2.99\n' "$have" | sort -V | head -1)" != "2.99" ]; then
+            curl -fsSL https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz \
+              | sudo tar -xz --strip-components=2 -C /usr/local/bin gh_2.101.0_linux_amd64/bin/gh
+          fi
           gh --version
 
       - name: open the draft pull request

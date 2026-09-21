@@ -13,6 +13,8 @@ const REPO = resolve(process.env.HARNESS_REPO ?? process.cwd());
 const RECORD_REPO = process.env.RECORD_REPO;
 const RECORD_BRANCH = process.env.RECORD_BRANCH ?? 'harness-state';
 const REPAIR_BUDGET = Number(process.env.REPAIR_BUDGET ?? 1);
+const REVIEW_MODEL = process.env.REVIEW_MODEL ?? 'haiku';
+const ENCODE = process.env.ENCODE !== 'off';
 
 const runPath = (id) => `${RUNS_DIR}/${id}/run.json`;
 const artifactsDir = (id) => `${RUNS_DIR}/${id}/artifacts`;
@@ -69,8 +71,13 @@ function freePort() {
   });
 }
 
-function claude(prompt, { json = false, edits = false } = {}) {
-  const args = edits ? ['--permission-mode', 'acceptEdits', '-p', prompt] : ['-p', prompt];
+function claude(prompt, { json = false, edits = false, model } = {}) {
+  const args = [
+    ...(model ? ['--model', model] : []),
+    ...(edits ? ['--permission-mode', 'acceptEdits'] : []),
+    '-p',
+    prompt,
+  ];
   const out = execFileSync('claude', args, {
     cwd: REPO,
     encoding: 'utf8',
@@ -169,6 +176,8 @@ function recordJourney(run, env) {
   if (!webm) return null;
 
   const mp4 = `${artifacts}/demo.mp4`;
+  if (!ENCODE) return { webm, mp4: webm };
+
   try {
     sh(`ffmpeg -y -loglevel error -i ${JSON.stringify(webm)} -c:v libx264 -pix_fmt yuv420p ${mp4}`);
     return { webm, mp4 };
@@ -323,7 +332,7 @@ function review(run) {
       `"why":"the case against it in one sentence"}]}\n` +
       `Every finding needs all four fields. severity is exactly "blocking" or "note". ` +
       `Return {"findings":[]} when you have no case against the diff.`,
-    { json: true },
+    { json: true, model: REVIEW_MODEL },
   );
 
   // the reviewer is a model, so treat its shape as untrusted
