@@ -1,13 +1,17 @@
 {
   "id": "run-muas78dt-8545",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T05:05:47.271Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T05:06:42.605Z"
     }
   ],
   "artifacts": {},
@@ -45,5 +49,25 @@
       "path": "app/public/style.css",
       "note": "Only styling hook currently is 'li.done' for strikethrough; no styling exists for importance/priority, so a new visual treatment (e.g. highlight or badge) would need to be defined."
     }
-  ]
+  ],
+  "reply": "A separate view, not re-sorting the main list. Just on and off, no levels. And it should stay important even after it's done.",
+  "spec": {
+    "summary": "Add an on/off \"important\" flag to tasks, with a separate view that shows only important tasks (main list stays unsorted), and completing a task keeps it marked important.",
+    "acceptance": [
+      "Each task in the main list has a toggle control to mark or unmark it as important.",
+      "An Important view/tab exists that lists only tasks currently marked important.",
+      "Marking or unmarking a task important does not change its position or order in the main task list.",
+      "Checking an important task as done keeps it marked important and it still appears in the Important view.",
+      "Unmarking a task as important removes it from the Important view but leaves it in the main list."
+    ],
+    "unchanged": [
+      "Main list task order remains insertion order (by id) regardless of importance.",
+      "Existing done/undone toggle behavior and strikethrough styling for completed tasks are unaffected.",
+      "Tasks without the important flag behave exactly as before."
+    ],
+    "check": "Automated check creates tasks, marks one important via the toggle, verifies it appears in the Important view while main list order is unchanged, marks it done, and verifies it remains in the Important view and marked important.",
+    "journey": "mark-task-important",
+    "reviewFocus": "Confirm the important flag is persisted independently of done (schema/migration adds a real column, not derived state) so completing a task never clears importance and the Important view reflects the flag directly rather than a re-sort of the main list."
+  },
+  "actionsRunId": "35563336943"
 }
