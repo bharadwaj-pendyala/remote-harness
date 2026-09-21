@@ -87,7 +87,15 @@ if not RECORD_REPO:
     st.error("Set RECORD_REPO to the harness repository, as owner/repo.")
     st.stop()
 
-runs = load_runs()
+try:
+    runs = load_runs()
+except subprocess.CalledProcessError as error:
+    st.error("Could not read the run records. Retrying shortly.")
+    st.caption((error.stderr or "").strip()[:400])
+    time.sleep(5)
+    load_runs.clear()
+    st.rerun()
+
 by_id = {run["id"]: run for run in runs}
 
 with st.sidebar:

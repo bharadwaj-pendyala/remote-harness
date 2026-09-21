@@ -66,8 +66,8 @@ function commitRecord(run, expectedHead) {
   return commit(`${run.id}: ${run.state}`, { additions: [{ path: remotePath(run.id), contents }] }, expectedHead);
 }
 
-function fetchRecord(id) {
-  const head = branchHead();
+function fetchRecord(id, at) {
+  const head = at ?? branchHead();
   const encoded = api(`contents/${remotePath(id)}?ref=${head}`, '.content');
   return { run: JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')), head };
 }
@@ -112,11 +112,21 @@ function pull(id) {
 }
 
 function list() {
-  const names = JSON.parse(api(`contents/runs?ref=${BRANCH}`))
+  // one commit for the whole listing, so a write mid-poll cannot strand a file
+  const head = branchHead();
+  const names = JSON.parse(api(`contents/runs?ref=${head}`))
     .map((entry) => entry.name)
     .filter((name) => name.startsWith('run-'));
 
-  const runs = names.map((name) => fetchRecord(name.replace(/\.json$/, '')).run);
+  const runs = [];
+  for (const name of names) {
+    try {
+      runs.push(fetchRecord(name.replace(/\.json$/, ''), head).run);
+    } catch {
+      // a record can be dropped while the listing is in flight
+    }
+  }
+
   console.log(JSON.stringify(runs, null, 2));
   return runs;
 }
