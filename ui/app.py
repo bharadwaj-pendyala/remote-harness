@@ -12,6 +12,7 @@ RECORD_BRANCH = os.environ.get("RECORD_BRANCH", "harness-state")
 
 STATE_LABELS = {
     "queued": ("Starting", "grey"),
+    "repairing": ("Repairing", "grey"),
     "clarifying": ("Waiting on you", "orange"),
     "clarified": ("Waiting on you", "orange"),
     "prepared": ("Building", "grey"),
@@ -125,8 +126,9 @@ elif run["state"] == "clarified":
     for line in spec["acceptance"]:
         st.markdown(f"- {line}")
     st.caption("Unchanged: " + "; ".join(spec["unchanged"]))
+    fast = st.checkbox("Fast run", value=True, help="Skip the H.264 encode and review on a faster model")
     if st.button("That is right, build it", type="primary"):
-        dispatch("execute.yml", run_id=run_id, mode="execute")
+        dispatch("execute.yml", run_id=run_id, mode="execute", fast=str(fast).lower())
         load_runs.clear()
         st.rerun()
 

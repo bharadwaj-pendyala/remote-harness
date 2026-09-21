@@ -2,4 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${RECORD_REPO:?set RECORD_REPO to the harness repository, as owner/repo}"
-exec streamlit run ui/app.py
+
+streamlit=streamlit
+[ -x .venv/bin/streamlit ] && streamlit=.venv/bin/streamlit
+
+exec "$streamlit" run ui/app.py "$@"
