@@ -1,13 +1,17 @@
 {
   "id": "run-muatladr-6d92",
   "request": "Show me how many tasks I still have left to do",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T05:45:16.955Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T05:46:03.524Z"
     }
   ],
   "artifacts": {},
@@ -40,5 +44,24 @@
       "path": "db/seed.js",
       "note": "Tasks table has `done INTEGER` (0 or 1); seed data has 2 undone and 1 done task, confirming 'left to do' maps directly to `done = 0`."
     }
-  ]
+  ],
+  "reply": "Just a count of the ones not done yet, shown at the top of the list. Plain text is fine.",
+  "spec": {
+    "title": "Show remaining task count above the list",
+    "summary": "Add plain-text count of not-done tasks at the top of the task list, computed client-side; finished tasks remain visible underneath.",
+    "acceptance": [
+      "A plain-text element above the `<ul id=\"tasks\">` list shows the number of tasks with done = 0",
+      "The count updates after adding a task, and after toggling a task's done state, without a page reload",
+      "Completed tasks remain visible in the list below the count (list contents/order otherwise unchanged)"
+    ],
+    "unchanged": [
+      "GET /api/tasks response shape and fields",
+      "Rendering of individual task list items (checkbox + title)",
+      "Add-task form behavior"
+    ],
+    "check": "Automated check verifies the count element exists above the list, matches the number of tasks with done = 0 from the seeded data, and updates correctly after toggling a task's done state.",
+    "journey": "remaining-tasks-count",
+    "reviewFocus": "Confirm the remaining count is derived from the same fetched tasks array (done === 0) rather than a new/duplicated data source, and that it recalculates on every render so it never drifts from the visible list."
+  },
+  "actionsRunId": "35565765823"
 }
