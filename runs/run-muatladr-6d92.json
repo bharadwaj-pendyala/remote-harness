@@ -1,7 +1,7 @@
 {
   "id": "run-muatladr-6d92",
   "request": "Show me how many tasks I still have left to do",
-  "state": "check-failed",
+  "state": "stopped",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
@@ -24,6 +24,10 @@
     {
       "state": "check-failed",
       "at": "2026-09-21T05:48:54.159Z"
+    },
+    {
+      "state": "stopped",
+      "at": "2026-09-21T05:50:13.290Z"
     }
   ],
   "artifacts": {
@@ -80,5 +84,6 @@
   "actionsRunId": "35565816204",
   "branch": "harness/run-muatladr-6d92",
   "port": 39395,
-  "diffstat": "journeys/remaining-tasks-count.journey.ts | 14 +++++++++\n public/app.js                             |  3 ++\n public/index.html                         |  1 +\n public/style.css                          |  2 ++\n tests/remaining-tasks-count.spec.ts       | 49 +++++++++++++++++++++++++++++++\n 5 files changed, 69 insertions(+)"
+  "diffstat": "journeys/remaining-tasks-count.journey.ts | 14 +++++++++\n public/app.js                             |  3 ++\n public/index.html                         |  1 +\n public/style.css                          |  2 ++\n tests/remaining-tasks-count.spec.ts       | 49 +++++++++++++++++++++++++++++++\n 5 files changed, 69 insertions(+)",
+  "reason": "the repair stage failed, see the workflow log"
 }
