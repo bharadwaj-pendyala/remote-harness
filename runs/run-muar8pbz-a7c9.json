@@ -1,7 +1,49 @@
 {
   "id": "run-muar8pbz-a7c9",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "queued",
-  "history": [],
-  "artifacts": {}
+  "state": "clarifying",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarifying",
+      "at": "2026-09-21T04:39:24.640Z"
+    }
+  ],
+  "artifacts": {},
+  "questions": [
+    {
+      "id": "q1",
+      "ask": "When a task is marked important, should it automatically jump to the top of the list (above non-important tasks), or just get a visual marker (like a star) while staying in its current position?",
+      "why": "Determines whether we need to add sorting logic that reorders the list, or just add a toggle and a style change — a noticeably different amount of work and a different visual result."
+    },
+    {
+      "id": "q2",
+      "ask": "Is 'important' a simple on/off flag (like a star you can toggle), or do you need multiple priority levels (e.g. low/medium/high)?",
+      "why": "An on/off flag is a small addition to the existing done/not-done toggle; multiple levels require a different data field and a way to pick between them, which is a bigger change."
+    },
+    {
+      "id": "q3",
+      "ask": "Once a task is checked off as done, should it stay marked important, or should completing it clear the important mark?",
+      "why": "Determines whether completed tasks still sort/display as important, or drop out of that treatment once done — affects the sort/display rule we build."
+    }
+  ],
+  "findings": [
+    {
+      "path": "app/public/app.js",
+      "note": "Frontend renders a flat task list from GET /api/tasks with no sorting; each item only has a done checkbox and title, added via toggleDone(). Marking important would need a new UI control and a render-order change."
+    },
+    {
+      "path": "app/server.js",
+      "note": "Express API backed by SQLite; tasks table only has id, title, done. PATCH /api/tasks/:id currently only updates 'done'. Adding importance requires a new column and extending the PATCH handler (and likely GET ordering)."
+    },
+    {
+      "path": "app/db/seed.js",
+      "note": "Schema is defined here (id, title, done INTEGER). No 'important' or priority column exists yet — would need to be added and seed data updated."
+    },
+    {
+      "path": "app/public/index.html / style.css",
+      "note": "Minimal markup: just a form and a <ul> for tasks; no existing star/priority UI pattern to reuse."
+    }
+  ]
 }
