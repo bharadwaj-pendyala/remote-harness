@@ -1,13 +1,17 @@
 {
   "id": "run-muasmbxt-a5c8",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T05:17:24.757Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T05:18:27.099Z"
     }
   ],
   "artifacts": {},
@@ -45,5 +49,26 @@
       "path": "public/index.html + style.css",
       "note": "simple single-list UI, dark theme, no filter controls or task metadata beyond checkbox+title; any 'important' marker or filter toggle would be new UI"
     }
-  ]
+  ],
+  "reply": "A separate view, not re-sorting the main list. Just on and off, no levels. And it should stay important even after it's done.",
+  "spec": {
+    "title": "Add important flag and filter view for tasks",
+    "summary": "Let users mark tasks important via a checkbox and switch to a separate view showing only important tasks, without reordering the main list.",
+    "acceptance": [
+      "Each task row has an 'important' checkbox alongside the existing 'done' checkbox",
+      "Toggling the important checkbox persists after a page reload",
+      "A view toggle (e.g. 'Show important only') switches the list to show only tasks marked important",
+      "A task marked done while important remains visible in the important filter view and keeps its important flag",
+      "Switching back to the default view shows all tasks again"
+    ],
+    "unchanged": [
+      "Default view task order remains sorted by id, with no automatic re-sorting based on importance",
+      "The existing done checkbox and its toggle behavior work exactly as before",
+      "Newly created tasks default to not important"
+    ],
+    "check": "Automated check marks a task important, reloads, and confirms the flag persisted; marks it done and confirms it still appears in the important-only filter view; confirms the default view's task order is unchanged (still by id) after marking tasks important",
+    "journey": "mark-and-filter-important-tasks",
+    "reviewFocus": "Confirm the important-only view is a pure client-side/read filter that never mutates or re-sorts the underlying task order, and that the important flag is stored independently of and unaffected by the done flag."
+  },
+  "actionsRunId": "35564064816"
 }
