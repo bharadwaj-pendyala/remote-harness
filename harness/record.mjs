@@ -49,17 +49,21 @@ const COMMIT = `mutation ($input: CreateCommitOnBranchInput!) {
   createCommitOnBranch(input: $input) { commit { oid } }
 }`;
 
-function commitRecord(run, expectedHead) {
-  const contents = Buffer.from(`${JSON.stringify(run, null, 2)}\n`).toString('base64');
+function commit(headline, fileChanges, expectedHead) {
   const { createCommitOnBranch } = graphql(COMMIT, {
     input: {
       branch: { repositoryNameWithOwner: RECORD_REPO, branchName: BRANCH },
       expectedHeadOid: expectedHead,
-      message: { headline: `${run.id}: ${run.state}` },
-      fileChanges: { additions: [{ path: remotePath(run.id), contents }] },
+      message: { headline },
+      fileChanges,
     },
   });
   return createCommitOnBranch.commit.oid;
+}
+
+function commitRecord(run, expectedHead) {
+  const contents = Buffer.from(`${JSON.stringify(run, null, 2)}\n`).toString('base64');
+  return commit(`${run.id}: ${run.state}`, { additions: [{ path: remotePath(run.id), contents }] }, expectedHead);
 }
 
 function fetchRecord(id) {
@@ -117,6 +121,12 @@ function list() {
   return runs;
 }
 
+function drop(id) {
+  const oid = commit(`${id}: dropped`, { deletions: [{ path: remotePath(id) }] }, branchHead());
+  console.log(`dropped    ${id} at ${oid.slice(0, 7)}`);
+  return oid;
+}
+
 function state(id) {
   const run = existsSync(runPath(id)) ? JSON.parse(readFileSync(runPath(id), 'utf8')) : fetchRecord(id).run;
   console.log(run.state);
@@ -131,6 +141,7 @@ const commands = {
   push: () => push(rest[0]),
   pull: () => pull(rest[0]),
   list: () => list(),
+  drop: () => drop(rest[0]),
   state: () => state(rest[0]),
 };
 
@@ -140,6 +151,7 @@ if (!commands[command]) {
   node harness/record.mjs push <run-id>
   node harness/record.mjs pull <run-id>
   node harness/record.mjs list
+  node harness/record.mjs drop <run-id>
   node harness/record.mjs state <run-id>`);
   process.exit(1);
 }

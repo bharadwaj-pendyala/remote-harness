@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Clear the runs a rehearsal left behind. Prints what it would do; --yes performs it.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+: "${RECORD_REPO:?set RECORD_REPO to the harness repository, as owner/repo}"
+: "${APP_REPO:?set APP_REPO to the application repository, as owner/repo}"
+
+APPLY=false
+KEEP=()
+for arg in "$@"; do
+  case "$arg" in
+    --yes) APPLY=true ;;
+    *) KEEP+=("$arg") ;;
+  esac
+done
+
+keeping() {
+  local id="$1"
+  for kept in ${KEEP+"${KEEP[@]}"}; do [ "$kept" = "$id" ] && return 0; done
+  return 1
+}
+
+act() {
+  if $APPLY; then "$@"; else echo "    would: $*"; fi
+}
+
+echo "draft pull requests on ${APP_REPO}"
+for pr in $(gh pr list --repo "$APP_REPO" --state open --json number,headRefName \
+              --jq '.[] | select(.headRefName | startswith("harness/")) | "\(.number):\(.headRefName)"'); do
+  number="${pr%%:*}"
+  id="${pr##*/}"
+  keeping "$id" && { echo "  keep  #${number}  ${id}"; continue; }
+  echo "  close #${number}  ${id}"
+  act gh pr close "$number" --repo "$APP_REPO" --delete-branch
+done
+
+echo "candidate branches on ${APP_REPO}"
+for branch in $(gh api "repos/${APP_REPO}/branches" --paginate --jq '.[].name' | grep '^harness/' || true); do
+  id="${branch##harness/}"
+  keeping "$id" && { echo "  keep  ${branch}"; continue; }
+  echo "  drop  ${branch}"
+  act gh api -X DELETE "repos/${APP_REPO}/git/refs/heads/${branch}"
+done
+
+echo "run records on ${RECORD_REPO}"
+for file in $(gh api "repos/${RECORD_REPO}/contents/runs?ref=${RECORD_BRANCH:-harness-state}" \
+                --jq '.[].name' | grep '^run-' || true); do
+  id="${file%.json}"
+  keeping "$id" && { echo "  keep  ${id}"; continue; }
+  echo "  drop  ${id}"
+  act node harness/record.mjs drop "$id"
+done
+
+$APPLY || echo $'\nnothing changed. pass --yes to apply, and run ids to keep.'
