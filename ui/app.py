@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -55,13 +56,32 @@ def dispatch(workflow, **inputs):
     gh(*args)
 
 
+SETTLED = {"published", "stopped"}
+
+STAGE_WORDS = {
+    "clarify": "Reading your app and working out what to ask",
+    "answer": "Turning your answers into an agreed task",
+    "execute": "Building it, checking it, and recording it",
+    "repair": "A check failed, fixing it",
+}
+
+
+@st.cache_data(ttl=4)
+def workflow_runs(run_id):
+    rows = json.loads(
+        gh("run", "list", "--repo", RECORD_REPO, "--limit", "20",
+           "--json", "displayTitle,status,conclusion,url,startedAt")
+    )
+    return [row for row in rows if run_id in row["displayTitle"]]
+
+
 @st.cache_data(ttl=5)
 def load_runs():
     runs = json.loads(harness("record.mjs", "list") or "[]")
     return sorted(runs, key=lambda run: run["id"], reverse=True)
 
 
-st.set_page_config(page_title="Ask for a change", page_icon="✳️", layout="centered")
+st.set_page_config(page_title="Bharad Harness", page_icon="✳️", layout="centered")
 
 if not RECORD_REPO:
     st.error("Set RECORD_REPO to the harness repository, as owner/repo.")
@@ -83,7 +103,8 @@ with st.sidebar:
 run_id = st.session_state.get("run_id")
 
 if not run_id:
-    st.title("What would you like changed?")
+    st.title("Bharad Harness")
+    st.caption("Describe a change. An engineer reviews what comes back.")
     request = st.text_area("Describe it the way you would to a colleague.", height=120)
     if st.button("Send", type="primary", disabled=not request.strip()):
         new_id = harness("record.mjs", "open", request.strip())
@@ -150,6 +171,23 @@ elif run["state"] == "stopped":
 
 else:
     st.info("Building and checking the change.")
+
+activity = workflow_runs(run_id)
+if activity:
+    st.divider()
+    st.caption("What the harness is doing")
+    for row in activity:
+        stage = row["displayTitle"].split("\u00b7")[0].strip()
+        done = row["status"] == "completed"
+        mark = "\u2713" if row.get("conclusion") == "success" else ("\u2717" if done else "\u25cf")
+        words = STAGE_WORDS.get(stage, stage)
+        st.markdown(f"{mark}  **{stage}** \u00b7 {words} \u00b7 [logs]({row['url']})")
+
+if run["state"] not in SETTLED:
+    time.sleep(5)
+    load_runs.clear()
+    workflow_runs.clear()
+    st.rerun()
 
 with st.expander("Run record"):
     st.caption(f"{RECORD_REPO} · {RECORD_BRANCH} · runs/{run_id}.json")
