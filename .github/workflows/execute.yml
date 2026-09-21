@@ -176,6 +176,7 @@ jobs:
           GH_TOKEN: ${{ secrets.APP_REPO_TOKEN }}
           HARNESS_REPO: ${{ github.workspace }}/app
           RUNS_DIR: ${{ github.workspace }}/runs
+          RECORD_REPO: ${{ github.repository }}
         run: |
           git -C "${{ github.workspace }}/app" fetch \
             "${{ github.workspace }}/runs/${{ inputs.run_id }}/candidate.bundle" \

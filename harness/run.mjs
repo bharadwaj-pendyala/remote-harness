@@ -1,19 +1,31 @@
 #!/usr/bin/env node
 import { execFileSync, execSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { parseArgs } from 'node:util';
 
-import { resolve } from 'node:path';
+import { resolve, relative, basename } from 'node:path';
 
 const HARNESS_HOME = resolve(import.meta.dirname, '..');
 const RUNS_DIR = process.env.RUNS_DIR ?? `${HARNESS_HOME}/runs`;
 const REPO = resolve(process.env.HARNESS_REPO ?? process.cwd());
+const RECORD_REPO = process.env.RECORD_REPO;
+const RECORD_BRANCH = process.env.RECORD_BRANCH ?? 'harness-state';
 const REPAIR_BUDGET = Number(process.env.REPAIR_BUDGET ?? 1);
 
 const runPath = (id) => `${RUNS_DIR}/${id}/run.json`;
 const artifactsDir = (id) => `${RUNS_DIR}/${id}/artifacts`;
+
+// a record written on one worker is read on another, so paths are resolved locally
+function artifact(run, key) {
+  const stored = run.artifacts?.[key];
+  if (!stored) return null;
+  if (existsSync(stored)) return stored;
+
+  const here = `${artifactsDir(run.id)}/${basename(stored)}`;
+  return existsSync(here) ? here : null;
+}
 
 function loadRun(id) {
   if (!existsSync(runPath(id))) throw new Error(`no run record for ${id}`);
@@ -117,7 +129,8 @@ function answer(id, reply) {
       `\n\nMatch their reply to the questions. Where they did not answer one, choose the smaller change ` +
       `and say so in the summary.\n\n` +
       `Write the agreed task as JSON only:\n` +
-      `{"summary":"one line","acceptance":["observable statements"],"unchanged":["behavior that must not change"],` +
+      `{"title":"imperative, under 60 characters, no trailing period",` +
+      `"summary":"one line","acceptance":["observable statements"],"unchanged":["behavior that must not change"],` +
       `"check":"what the automated check must prove","journey":"kebab-case name for the recorded journey",` +
       `"reviewFocus":"the one decision in this diff a reviewer must check, in a sentence"}`,
     { json: true },
@@ -266,7 +279,7 @@ async function repair(id) {
       `The checks passed, but recording the journey failed, so there is no video.\n\n` +
       `Fix journeys/${run.spec.journey}.journey.ts only. Do not change the implementation.\n` +
       `Playwright runs in strict mode, so every locator must resolve to exactly one element.\n\n` +
-      `Recording output:\n${tail(run.artifacts.record)}`,
+      `Recording output:\n${tail(artifact(run, 'record'))}`,
     'review-failed': () =>
       `A reviewer refused to merge this.\n\n` +
       run.review
@@ -329,27 +342,46 @@ function review(run) {
   return run;
 }
 
-function prBody(run) {
-  const checks = stripAnsi(readFileSync(run.artifacts.checks, 'utf8')).trim().split('\n').slice(-40).join('\n');
+function prBody(run, videoRef) {
+  const checksLog = artifact(run, 'checks');
+  const noise = /ExperimentalWarning|trace-warnings|^\s*$/;
+  const checks = stripAnsi(checksLog ? readFileSync(checksLog, 'utf8') : 'the checks log did not survive the run')
+    .split('\n')
+    .filter((line) => !noise.test(line))
+    .slice(-30)
+    .join('\n');
+
+  const recordUrl = RECORD_REPO
+    ? `https://github.com/${RECORD_REPO}/blob/${RECORD_BRANCH}/runs/${run.id}.json`
+    : null;
+
   return [
-    `**Change**  ${run.spec.summary}`,
-    `**Request**  ${run.request}`,
-    `**Candidate**  \`${run.candidate.slice(0, 7)}\` from \`${run.baseCommit.slice(0, 7)}\``,
-    `**Run**  \`${run.id}\``,
+    `> ${run.request}`,
     ``,
-    `### Agreed with the requester`,
-    ...run.spec.acceptance.map((a) => `- [x] ${a}`),
+    `### What it does`,
+    run.spec.summary,
+    ``,
+    videoRef,
+    ``,
+    `### The behaviour that was agreed`,
+    ...run.spec.acceptance.map((a) => `- ${a}`),
+    ``,
+    `---`,
     ``,
     `### Review focus`,
-    run.spec.reviewFocus ?? 'Check the stored field, the read path, and reload behavior.',
-    ...run.spec.unchanged.map((u) => `- must still hold: ${u}`),
+    run.spec.reviewFocus ?? 'Check the stored field, the read path, and reload behaviour.',
     ``,
-    `### What the reviewer argued`,
-    ...(run.review ?? []).map((f) => `- **${f.path}** ${f.claim}. ${f.why}`),
-    (run.review ?? []).length ? `` : `Nothing. The reviewer found no case against this diff.`,
+    `Must still hold:`,
+    ...run.spec.unchanged.map((u) => `- ${u}`),
+    ``,
+    `### What the reviewer argued against this diff`,
+    (run.review ?? []).length
+      ? run.review.map((f) => `- \`${f.severity}\` **${f.path}** ${f.claim} ${f.why}`).join('\n')
+      : `Nothing. A second agent read the diff against the agreed behaviour and found no case to make.`,
     ``,
     `### Checks`,
-    `All required checks passed. Command: \`./scripts/check-app\``,
+    `\`./scripts/check-app\` passed on \`${run.candidate.slice(0, 7)}\`.`,
+    ``,
     `<details><summary>Full output</summary>`,
     ``,
     '```',
@@ -358,10 +390,15 @@ function prBody(run) {
     ``,
     `</details>`,
     ``,
-    `### Demo video`,
-    run.artifacts.mp4,
+    `---`,
     ``,
-    `**Acceptance**  pending requester review`,
+    `| | |`,
+    `|---|---|`,
+    `| Candidate | \`${run.candidate.slice(0, 7)}\` from \`${run.baseCommit.slice(0, 7)}\` |`,
+    `| Run record | ${recordUrl ? `[\`${run.id}\`](${recordUrl})` : `\`${run.id}\``} |`,
+    `| Acceptance | pending requester review |`,
+    ``,
+    `Opened by the harness. An engineer owns the merge.`,
   ].join('\n');
 }
 
@@ -369,14 +406,26 @@ function publish(id) {
   const run = loadRun(id);
   if (!run.candidate) throw new Error(`run ${id} has no candidate commit`);
 
+  // gh rewrites a body reference only when it matches the path it was given,
+  // so the video sits beside the checkout under a plain name while gh runs
+  const source = artifact(run, 'mp4') ?? run.artifacts.mp4;
+  const videoRef = `demo${source.endsWith('.webm') ? '.webm' : '.mp4'}`;
+  copyFileSync(source, `${REPO}/${videoRef}`);
+
   const bodyFile = `${RUNS_DIR}/${run.id}/pr-body.md`;
-  writeFileSync(bodyFile, prBody(run));
+  writeFileSync(bodyFile, prBody(run, videoRef));
   sh(`git push -q -u origin ${run.branch}`);
 
-  const url = sh(
-    `gh pr create --draft --title ${JSON.stringify(run.spec.summary)} ` +
-      `--body-file ${JSON.stringify(bodyFile)} --attach ${JSON.stringify(run.artifacts.mp4)}`,
-  ).trim();
+  const title = run.spec.title ?? run.spec.summary.split(/[.;]/)[0].slice(0, 60);
+  let url;
+  try {
+    url = sh(
+      `gh pr create --draft --title ${JSON.stringify(title)} ` +
+        `--body-file ${JSON.stringify(bodyFile)} --attach ${JSON.stringify(videoRef)}`,
+    ).trim();
+  } finally {
+    rmSync(`${REPO}/${videoRef}`, { force: true });
+  }
   transition(run, 'published', { pr: url });
   console.log(`published  ${url}`);
   return run;
@@ -404,7 +453,7 @@ const commands = {
   review: () => review(loadRun(rest[0])),
   publish: () => publish(rest[0]),
   accept: () => accept(rest[0]),
-  preview: () => console.log(prBody(loadRun(rest[0]))),
+  preview: () => console.log(prBody(loadRun(rest[0]), 'demo.mp4')),
   show: () => console.log(JSON.stringify(loadRun(rest[0]), null, 2)),
 };
 
