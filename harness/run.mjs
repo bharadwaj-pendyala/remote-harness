@@ -229,33 +229,73 @@ function finish(run, env) {
   });
   console.log(`recorded   ${video.mp4}`);
   console.log(`candidate  ${candidate.slice(0, 7)}`);
-  return run;
+
+  return review(run);
 }
 
 async function repair(id) {
   const run = loadRun(id);
-  if (run.state !== 'check-failed') throw new Error(`run ${id} is not waiting on a repair`);
+  if (!['check-failed', 'review-failed'].includes(run.state)) {
+    throw new Error(`run ${id} is not waiting on a repair`);
+  }
   if (run.repairsLeft <= 0) return stop(run, 'the repair budget is spent');
 
   const artifacts = artifactsDir(run.id);
   const port = await freePort();
   const env = { ...process.env, PORT: String(port), ARTIFACTS_DIR: artifacts };
-  const failure = readFileSync(run.artifacts.checks, 'utf8').trim().split('\n').slice(-60).join('\n');
+
+  const complaint =
+    run.state === 'check-failed'
+      ? `A required check failed.\n\nCheck output:\n` +
+        readFileSync(run.artifacts.checks, 'utf8').trim().split('\n').slice(-60).join('\n')
+      : `A reviewer refused to merge this.\n\n` +
+        run.review
+          .filter((f) => f.severity === 'blocking')
+          .map((f) => `  ${f.path}: ${f.claim}\n    ${f.why}`)
+          .join('\n');
 
   transition(run, 'repairing', { repairsLeft: run.repairsLeft - 1 });
   console.log(`repairing  ${run.repairsLeft} left after this attempt`);
 
   claude(
-    `A required check failed on your implementation. Repair it.\n\n` +
+    `Repair your implementation.\n\n` +
       `Summary: ${run.spec.summary}\n` +
       `The check must prove: ${run.spec.check}\n\n` +
-      `Check output:\n${failure}\n\n` +
+      `${complaint}\n\n` +
       `Fix the implementation, not the check, unless the check itself is wrong.\n` +
       `Hard limits: do not run the tests. Do not commit. Do not touch .github/.`,
     { edits: true },
   );
 
   return finish(run, env);
+}
+
+function review(run) {
+  const diff = sh(`git diff ${run.baseCommit}..HEAD`).slice(0, 60000);
+
+  const { findings } = claude(
+    `You are reviewing a diff an agent wrote. Argue against it.\n\n` +
+      `The agreed task:\n${run.spec.summary}\n` +
+      `Acceptance:\n${run.spec.acceptance.map((a) => `  - ${a}`).join('\n')}\n` +
+      `Must not change:\n${run.spec.unchanged.map((u) => `  - ${u}`).join('\n')}\n\n` +
+      `What intake found before any of this was written:\n` +
+      (run.findings ?? []).map((f) => `  ${f.path}: ${f.note}`).join('\n') +
+      `\n\nThe diff:\n${diff}\n\n` +
+      `Look for behavior the diff breaks, data that predates it, and acceptance lines it only ` +
+      `appears to satisfy. Do not restate what the diff does. Do not praise it.\n` +
+      `Call a finding blocking only when a reviewer would refuse to merge.\n\n` +
+      `Reply with JSON only:\n` +
+      `{"findings":[{"severity":"blocking|note","path":"file","claim":"what is wrong",` +
+      `"why":"the case against it in one sentence"}]}`,
+    { json: true },
+  );
+
+  const blocking = findings.filter((f) => f.severity === 'blocking');
+  transition(run, blocking.length ? 'review-failed' : 'reviewed', { review: findings });
+
+  for (const f of findings) console.log(`  ${f.severity.padEnd(8)} ${f.path}  ${f.claim}`);
+  console.log(blocking.length ? `review-failed  ${blocking.length} blocking` : 'reviewed   nothing blocking');
+  return run;
 }
 
 function prBody(run) {
@@ -272,6 +312,10 @@ function prBody(run) {
     `### Review focus`,
     run.spec.reviewFocus ?? 'Check the stored field, the read path, and reload behavior.',
     ...run.spec.unchanged.map((u) => `- must still hold: ${u}`),
+    ``,
+    `### What the reviewer argued`,
+    ...(run.review ?? []).map((f) => `- **${f.path}** ${f.claim}. ${f.why}`),
+    (run.review ?? []).length ? `` : `Nothing. The reviewer found no case against this diff.`,
     ``,
     `### Checks`,
     `All required checks passed. Command: \`./scripts/check-app\``,
@@ -326,6 +370,7 @@ const commands = {
   answer: () => answer(rest[0], rest.slice(1).join(' ')),
   execute: () => execute(rest[0]),
   repair: () => repair(rest[0]),
+  review: () => review(loadRun(rest[0])),
   publish: () => publish(rest[0]),
   accept: () => accept(rest[0]),
   preview: () => console.log(prBody(loadRun(rest[0]))),
@@ -338,6 +383,7 @@ if (values.help || !commands[command]) {
   node harness/run.mjs answer <run-id> "<their reply>"
   node harness/run.mjs execute <run-id>
   node harness/run.mjs repair <run-id>
+  node harness/run.mjs review <run-id>
   node harness/run.mjs publish <run-id>
   node harness/run.mjs accept <run-id>
   node harness/run.mjs preview <run-id>

@@ -131,7 +131,7 @@ jobs:
 
   publish:
     needs: work
-    if: needs.work.outputs.state == 'recorded'
+    if: needs.work.outputs.state == 'reviewed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -218,13 +218,13 @@ jobs:
           left=$(node -e "console.log(require('$record').repairsLeft)")
 
           case "$state" in
-            check-failed)
+            check-failed|review-failed)
               if [ "$left" -gt 0 ]; then
-                echo "check failed, ${left} repair attempts left, dispatching a repair"
+                echo "${state}, ${left} repair attempts left, dispatching a repair"
                 gh workflow run execute.yml --repo "${{ github.repository }}" \
                   -f run_id="${{ inputs.run_id }}" -f mode=repair
               else
-                echo "check failed and the repair budget is spent, the run stops here"
+                echo "${state} and the repair budget is spent, the run stops here"
               fi
               ;;
             published) echo "published, waiting on the requester" ;;

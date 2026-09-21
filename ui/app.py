@@ -19,6 +19,8 @@ STATE_LABELS = {
     "repairing": ("Repairing", "grey"),
     "checked": ("Building", "grey"),
     "recorded": ("Building", "grey"),
+    "review-failed": ("Repairing", "grey"),
+    "reviewed": ("Building", "grey"),
     "published": ("Ready to review", "green"),
     "stopped": ("Stopped", "red"),
 }

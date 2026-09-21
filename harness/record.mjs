@@ -20,7 +20,10 @@ const STAKEHOLDER_STATE = {
   'check-failed': 'Repairing',
   repairing: 'Repairing',
   checked: 'Running',
-  recorded: 'Ready to review',
+  recorded: 'Running',
+  reviewing: 'Being reviewed',
+  'review-failed': 'Repairing',
+  reviewed: 'Ready to review',
   published: 'Ready to review',
   stopped: 'Stopped',
 };
