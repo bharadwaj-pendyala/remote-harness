@@ -426,6 +426,18 @@ function publish(id) {
   } finally {
     rmSync(`${REPO}/${videoRef}`, { force: true });
   }
+
+  // gh appends the upload rather than substituting, so put it where it belongs
+  const number = url.split('/').pop();
+  const posted = sh(`gh pr view ${number} --json body --jq .body`);
+  const hosted = posted.match(/https:\/\/github\.com\/user-attachments\/assets\/\S+/)?.[0];
+  if (hosted) {
+    const placed = prBody(run, hosted).trimEnd();
+    writeFileSync(bodyFile, placed);
+    sh(`gh pr edit ${number} --body-file ${JSON.stringify(bodyFile)}`);
+    console.log(`video      placed in the body`);
+  }
+
   transition(run, 'published', { pr: url });
   console.log(`published  ${url}`);
   return run;
