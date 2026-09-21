@@ -1,7 +1,12 @@
 {
   "id": "run-muar02o2-c2da",
   "request": "let me mark important tasks and focus on those first",
-  "state": "queued",
-  "history": [],
+  "state": "clarifying",
+  "history": [
+    {
+      "state": "clarifying",
+      "at": "2026-09-21T04:31:36.405Z"
+    }
+  ],
   "artifacts": {}
 }
