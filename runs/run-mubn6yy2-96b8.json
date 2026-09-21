@@ -1,13 +1,17 @@
 {
   "id": "run-mubn6yy2-96b8",
   "request": "i want to make a change to how we perceive important tasks. How does important tasks work right now?",
-  "state": "clarifying",
+  "state": "clarified",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "repairsLeft": 1,
   "history": [
     {
       "state": "clarifying",
       "at": "2026-09-21T19:33:23.026Z"
+    },
+    {
+      "state": "clarified",
+      "at": "2026-09-21T19:40:43.444Z"
     }
   ],
   "artifacts": {},
@@ -41,5 +45,25 @@
       "path": "public/app.js and public/index.html",
       "note": "UI is a single unstyled list with a checkbox and title per task; no priority/star controls or filters exist anywhere in the app."
     }
-  ]
+  ],
+  "reply": "introduce concept of important tasks i will go with your recommendation on the implementation",
+  "spec": {
+    "title": "Add toggleable important flag to tasks",
+    "summary": "Introduce a simple on/off 'important' flag per task, toggled via a star control, shown as a visual marker in the existing task list.",
+    "acceptance": [
+      "Each task in the list has a star (or equivalent) control that toggles its important status",
+      "Toggling the star updates the task's importance via the API and persists it in the database",
+      "Important tasks display a distinct visual marker (e.g. filled vs. outline star) in the list",
+      "Reloading the page preserves each task's important state"
+    ],
+    "unchanged": [
+      "Task list ordering stays as-is (by id); important tasks do not move or sort to the top",
+      "No separate filter or view is added for important tasks — they remain shown within the single existing list",
+      "Existing done/not-done checkbox behavior and API endpoints for it are unaffected"
+    ],
+    "check": "Automated check must prove that toggling a task's important flag via the UI/API persists (survives reload / is stored in the DB) and that the important marker renders correctly for both important and non-important tasks, without altering list order or introducing a filtered view.",
+    "journey": "mark-task-important",
+    "reviewFocus": "Confirm the implementation stays scoped to a boolean flag with a visual marker only — no reordering/sorting logic and no filter/view were added beyond what was agreed."
+  },
+  "actionsRunId": "35646246310"
 }
