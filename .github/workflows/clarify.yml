@@ -48,9 +48,11 @@ jobs:
         run: node harness/run.mjs clarify --id "$RUN_ID" "$REQUEST"
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: record
           path: runs/
+          if-no-files-found: ignore
 
   route:
     needs: work
@@ -68,9 +70,28 @@ jobs:
           node-version: 22
 
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: record
           path: runs
+
+      - name: stop the run when the stage produced nothing
+        if: needs.work.result != 'success'
+        working-directory: harness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECORD_REPO: ${{ github.repository }}
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: |
+          node harness/record.mjs pull "${{ inputs.run_id }}"
+          node -e "
+            const path = '${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json';
+            const record = JSON.parse(require('fs').readFileSync(path, 'utf8'));
+            record.state = 'stopped';
+            record.reason = 'the clarify stage failed, see the workflow log';
+            record.history.push({ state: 'stopped', at: new Date().toISOString() });
+            require('fs').writeFileSync(path, JSON.stringify(record, null, 2));
+          "
 
       - name: write the record
         working-directory: harness
