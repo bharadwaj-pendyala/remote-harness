@@ -85,13 +85,18 @@ jobs:
       - name: run the agent
         working-directory: harness
         env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           HARNESS_REPO: ${{ github.workspace }}/app
           RUNS_DIR: ${{ github.workspace }}/runs
           MODE: ${{ inputs.mode }}
           RUN_ID: ${{ inputs.run_id }}
           REPLY: ${{ inputs.reply }}
-        run: node harness/run.mjs "$MODE" "$RUN_ID" "$REPLY"
+        run: |
+          # an API key, when present, overrides the subscription token
+          if [ -n "$ANTHROPIC_API_KEY" ]; then unset CLAUDE_CODE_OAUTH_TOKEN; else unset ANTHROPIC_API_KEY; fi
+          node harness/run.mjs "$MODE" "$RUN_ID" "$REPLY"
+
 
       - name: bundle the candidate
         if: always() && inputs.mode != 'answer'

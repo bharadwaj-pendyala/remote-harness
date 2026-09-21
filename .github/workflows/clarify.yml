@@ -40,12 +40,16 @@ jobs:
       - name: ask the questions
         working-directory: harness
         env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           HARNESS_REPO: ${{ github.workspace }}/app
           RUNS_DIR: ${{ github.workspace }}/runs
           RUN_ID: ${{ inputs.run_id }}
           REQUEST: ${{ inputs.request }}
-        run: node harness/run.mjs clarify --id "$RUN_ID" "$REQUEST"
+        run: |
+          # an API key, when present, overrides the subscription token
+          if [ -n "$ANTHROPIC_API_KEY" ]; then unset CLAUDE_CODE_OAUTH_TOKEN; else unset ANTHROPIC_API_KEY; fi
+          node harness/run.mjs clarify --id "$RUN_ID" "$REQUEST"
 
       - uses: actions/upload-artifact@v4
         if: always()
