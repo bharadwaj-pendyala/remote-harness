@@ -1,7 +1,49 @@
 {
   "id": "run-muasmbxt-a5c8",
   "request": "Let me mark important tasks and focus on those first",
-  "state": "queued",
-  "history": [],
-  "artifacts": {}
+  "state": "clarifying",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarifying",
+      "at": "2026-09-21T05:17:24.757Z"
+    }
+  ],
+  "artifacts": {},
+  "questions": [
+    {
+      "id": "q1",
+      "ask": "When a task is marked important, should it automatically move to the top of the list, or would you also like a way to show only the important tasks (like a filter toggle)?",
+      "why": "determines whether we just change sort order or also add a filter view/control"
+    },
+    {
+      "id": "q2",
+      "ask": "If an important task is also marked done, should it still stay near the top, or should finished tasks always drop to the bottom regardless of importance?",
+      "why": "determines the sort logic (importance-first vs done-status-first) and whether importance and done interact"
+    },
+    {
+      "id": "q3",
+      "ask": "How should someone mark a task as important — a star/flag icon they click (like a favorite), or a checkbox similar to the existing 'done' checkbox?",
+      "why": "determines the UI control added to each task row and its visual treatment"
+    }
+  ],
+  "findings": [
+    {
+      "path": "db/seed.js",
+      "note": "tasks table only has id, title, done columns — no 'important' field exists yet; adding one requires a schema change"
+    },
+    {
+      "path": "server.js",
+      "note": "REST API: GET/POST /api/tasks, PATCH /api/tasks/:id (currently only toggles 'done'); would need to accept an 'important' field too, and GET would need to return tasks pre-sorted or support a filter"
+    },
+    {
+      "path": "public/app.js",
+      "note": "renders a plain <li> per task with a checkbox (done) and title span, always in DB order (ORDER BY id); no sorting/filtering logic exists client or server side"
+    },
+    {
+      "path": "public/index.html + style.css",
+      "note": "simple single-list UI, dark theme, no filter controls or task metadata beyond checkbox+title; any 'important' marker or filter toggle would be new UI"
+    }
+  ]
 }
