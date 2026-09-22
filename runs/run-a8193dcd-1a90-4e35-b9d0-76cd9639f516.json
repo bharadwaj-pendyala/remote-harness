@@ -95,5 +95,8 @@
   "candidate": "716c47b210890afc1bf50093b205569e91c06c43",
   "review": [],
   "actionsRunId": "35673534967",
-  "pr": "https://github.com/bharadwaj-pendyala/todo-app/pull/6"
+  "pr": "https://github.com/bharadwaj-pendyala/todo-app/pull/6",
+  "accepted": {
+    "at": "2026-09-22T00:58:12.147Z"
+  }
 }
