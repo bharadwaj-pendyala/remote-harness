@@ -1,0 +1,64 @@
+{
+  "id": "run-a8193dcd-1a90-4e35-b9d0-76cd9639f516",
+  "request": "Hey! GIve me one liner about what this app is about?",
+  "state": "clarified",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "spec": {
+    "title": "Add 'important' flag to tasks",
+    "summary": "Add an important flag to tasks so any task can be starred as important. Important tasks show a filled star and are sorted to the top of the list. Marking a task done does not clear its important flag. Add-task form is unchanged; importance is set afterward via a star toggle on each task row.",
+    "acceptance": [
+      "Each task row shows a star toggle (in addition to the existing done checkbox).",
+      "Clicking the star on a task marks it important; clicking again un-marks it, without needing a page reload.",
+      "The important state persists across page reloads (stored server-side, like the done flag).",
+      "Important tasks are sorted to the top of the list; among important tasks, undone ones come before done ones; ties keep existing id order. Non-important tasks keep their existing id order below.",
+      "Marking a task done does not change its important flag, and marking it important does not change its done flag; a task can be both done and important at once, shown as strikethrough title + filled star.",
+      "New tasks created via the add-task form default to not-important (no change to the add-task form itself).",
+      "The task API (GET/POST/PATCH /api/tasks) supports reading and updating the important flag alongside the existing title/done fields."
+    ],
+    "unchanged": [
+      "The add-task form (input + Add button) keeps its current fields and behavior; no importance selector is added at creation time.",
+      "The done checkbox continues to work exactly as it does today (toggle + persists on reload).",
+      "Overall page layout, color palette, and typography stay the same aside from the added star control.",
+      "Existing seeded tasks (Task A, Task B, Renew the domain) remain seeded the same way, just with important defaulting to false/0."
+    ],
+    "check": "Run the Playwright test suite (npm test); add/extend tests covering: starring a task persists after reload, and important tasks appear above non-important ones in the rendered list.",
+    "journey": "mark-task-important",
+    "reviewFocus": "Verify the sort ordering logic (important+undone first, then rest by id) matches what's expected, and confirm the star toggle is keyboard-accessible and has an appropriate aria-label similar to the done checkbox."
+  },
+  "findings": [
+    {
+      "path": "db/seed.js",
+      "note": "tasks table currently has id, title, done only — needs an 'important' column (default 0) added to the CREATE TABLE and seed inserts."
+    },
+    {
+      "path": "server.js",
+      "note": "GET/POST/PATCH /api/tasks handlers only read/write title and done; PATCH needs to accept an optional 'important' boolean similar to how it handles 'done'."
+    },
+    {
+      "path": "public/app.js",
+      "note": "toListItem() builds each row with a checkbox + title only; needs a star button element and a toggleImportant() handler mirroring toggleDone(); render() needs to sort tasks (important+undone first) before mapping to list items."
+    },
+    {
+      "path": "public/style.css",
+      "note": "No existing star/important styling; will need a small addition for the star button reusing --accent, and a way to differentiate filled vs unfilled star state."
+    },
+    {
+      "path": "tests/baseline.spec.ts",
+      "note": "Existing tests only cover listing and done-toggle persistence; new tests should cover important-toggle persistence and sort ordering."
+    }
+  ],
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarified",
+      "at": "2026-09-22T00:49:47.681Z"
+    }
+  ],
+  "artifacts": {},
+  "approval": {
+    "sessionId": "a8193dcd-1a90-4e35-b9d0-76cd9639f516",
+    "revision": 1,
+    "at": "2026-09-22T00:49:47.681Z",
+    "specHash": "195e01f43c20914816db2031075b16f650034c677354a234ac64144b1abc2620"
+  }
+}
