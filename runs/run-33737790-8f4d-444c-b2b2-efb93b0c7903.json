@@ -1,7 +1,7 @@
 {
   "id": "run-33737790-8f4d-444c-b2b2-efb93b0c7903",
   "request": "do we have a important label implemented",
-  "state": "clarified",
+  "state": "published",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "spec": {
     "title": "Add 'important' label to tasks",
@@ -49,13 +49,48 @@
     {
       "state": "clarified",
       "at": "2026-09-22T22:20:52.702Z"
+    },
+    {
+      "state": "prepared",
+      "at": "2026-09-22T22:21:25.007Z"
+    },
+    {
+      "state": "implemented",
+      "at": "2026-09-22T22:23:05.486Z"
+    },
+    {
+      "state": "checked",
+      "at": "2026-09-22T22:23:08.058Z"
+    },
+    {
+      "state": "recorded",
+      "at": "2026-09-22T22:23:14.613Z"
+    },
+    {
+      "state": "reviewed",
+      "at": "2026-09-22T22:24:34.790Z"
+    },
+    {
+      "state": "published",
+      "at": "2026-09-22T22:24:49.281Z"
     }
   ],
-  "artifacts": {},
+  "artifacts": {
+    "checks": "/home/runner/work/remote-harness/remote-harness/runs/run-33737790-8f4d-444c-b2b2-efb93b0c7903/artifacts/checks.log",
+    "video": "/home/runner/work/remote-harness/remote-harness/runs/run-33737790-8f4d-444c-b2b2-efb93b0c7903/artifacts/journey/important-task-label.journey.ts-important-task-label-journey/video.webm",
+    "mp4": "/home/runner/work/remote-harness/remote-harness/runs/run-33737790-8f4d-444c-b2b2-efb93b0c7903/artifacts/journey/important-task-label.journey.ts-important-task-label-journey/video.webm"
+  },
   "approval": {
     "sessionId": "33737790-8f4d-444c-b2b2-efb93b0c7903",
     "revision": 1,
     "at": "2026-09-22T22:20:52.702Z",
     "specHash": "8465edfed884c91aad0f75c2da99d74bb00e37e4db2e54912e44f92c5eeaddb5"
-  }
+  },
+  "branch": "harness/run-33737790-8f4d-444c-b2b2-efb93b0c7903",
+  "port": 40153,
+  "diffstat": "db/seed.js                               | 11 ++++---\n journeys/important-task-label.journey.ts | 31 ++++++++++++++++++\n public/app.js                            | 19 +++++++++--\n public/style.css                         |  3 ++\n server.js                                | 12 ++++++-\n tests/important-task-label.spec.ts       | 55 ++++++++++++++++++++++++++++++++\n 6 files changed, 123 insertions(+), 8 deletions(-)",
+  "candidate": "926c4cbc406540c82a8e7318374451402b08ecd9",
+  "review": [],
+  "actionsRunId": "35791872479",
+  "pr": "https://github.com/bharadwaj-pendyala/todo-app/pull/7"
 }
