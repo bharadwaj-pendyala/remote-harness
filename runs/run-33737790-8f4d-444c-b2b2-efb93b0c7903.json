@@ -1,0 +1,61 @@
+{
+  "id": "run-33737790-8f4d-444c-b2b2-efb93b0c7903",
+  "request": "do we have a important label implemented",
+  "state": "clarified",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "spec": {
+    "title": "Add 'important' label to tasks",
+    "summary": "Introduce a simple 'important' flag on each task, toggleable via a checkbox next to the existing 'done' checkbox on each task row. Important tasks are visually highlighted in the list (distinct style, e.g. bold/highlighted background), but list order is unchanged. The flag is persisted as a new boolean column on the tasks table and exposed through the existing PATCH /api/tasks/:id endpoint (mirroring how 'done' works today). New tasks are created with important=false by default; there is no way to set it at creation time, only via the toggle afterward.",
+    "acceptance": [
+      "Each task row in the UI shows a checkbox (in addition to the existing done checkbox) that toggles the task's 'important' state.",
+      "Toggling the important checkbox persists the change via PATCH /api/tasks/:id and the change survives a page reload (loaded from the server).",
+      "Tasks marked important are visually distinguished in the list (e.g. a highlighted style/badge) compared to non-important tasks.",
+      "The relative order of tasks in the list is unchanged by the important flag (no reordering to top).",
+      "New tasks created via the 'Add a task' form default to important=false.",
+      "GET /api/tasks returns the 'important' field for every task.",
+      "Existing task creation and done-toggle behavior work exactly as before."
+    ],
+    "unchanged": [
+      "The done checkbox and its toggle behavior remain exactly as-is.",
+      "Task creation via the 'Add a task' form (title-only input) is unchanged.",
+      "Task list ordering (by id) is unchanged.",
+      "No new pages, routes, or filtering views are added; this is a per-row flag and visual indicator only.",
+      "No new dependencies or migrations tooling beyond a straightforward schema change compatible with the existing seed/setup scripts."
+    ],
+    "check": "Run the existing app locally (scripts/start-app), load the task list, add a task, toggle its 'important' checkbox, verify it visually highlights, reload the page and confirm the important state persisted, then toggle it off and confirm it reverts. Also verify the existing 'done' toggle and task creation still work unaffected.",
+    "journey": "important-task-label",
+    "reviewFocus": "Verify the new 'important' boolean is correctly added to the DB schema/seed, correctly read/written via the API (GET and PATCH), the UI checkbox and visual highlight render correctly per task, and that no existing behavior (done toggle, task creation, ordering) regressed."
+  },
+  "findings": [
+    {
+      "path": "server.js",
+      "note": "Tasks table and API (GET/POST/PATCH /api/tasks) currently only handle 'title' and 'done'. Need to add an 'important' boolean column and allow PATCH to update it similarly to 'done'."
+    },
+    {
+      "path": "public/app.js",
+      "note": "toListItem() builds each task row with a single done checkbox and title span. Need to add a second checkbox for 'important' and apply a distinct CSS class/style when task.important is true."
+    },
+    {
+      "path": "public/style.css",
+      "note": "Currently only styles for '.done' class exist (inferred). Will need a new style rule for the important state highlight."
+    },
+    {
+      "path": "db/seed.js",
+      "note": "Seed data currently only sets title/done for sample tasks; should be checked/updated to include importance default so schema/seed stay consistent."
+    }
+  ],
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarified",
+      "at": "2026-09-22T22:20:52.702Z"
+    }
+  ],
+  "artifacts": {},
+  "approval": {
+    "sessionId": "33737790-8f4d-444c-b2b2-efb93b0c7903",
+    "revision": 1,
+    "at": "2026-09-22T22:20:52.702Z",
+    "specHash": "8465edfed884c91aad0f75c2da99d74bb00e37e4db2e54912e44f92c5eeaddb5"
+  }
+}
