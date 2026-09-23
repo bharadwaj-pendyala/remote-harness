@@ -1,0 +1,64 @@
+{
+  "id": "run-edf96209-dfcb-4cc6-ba63-a171df513480",
+  "request": "implement important label for added tasks",
+  "state": "clarified",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "spec": {
+    "title": "Star mark for important tasks",
+    "summary": "Add a small 'Important' checkbox to the add-task form. When checked, the created task is stored as important and shown with a ★ next to its title in the task list. Importance is set only at creation time; nothing else about the app changes.",
+    "acceptance": [
+      "The add-task form shows a checkbox labeled 'Important' next to the title input.",
+      "Submitting the form with the checkbox checked creates a task that is stored as important.",
+      "Submitting the form with the checkbox unchecked (default) creates a task that is not important, same as today.",
+      "Tasks marked important display a ★ next to their title in the task list.",
+      "Tasks not marked important show no star, same as today.",
+      "After adding a task, the Important checkbox resets to unchecked, matching the existing title-reset behavior."
+    ],
+    "unchanged": [
+      "Task list ordering (still by id, ascending).",
+      "Marking a task done/undone via the existing checkbox.",
+      "Seeded demo tasks (Task A, Task B, Renew the domain) and their done states.",
+      "Overall page layout, styling of the form/button, and colors aside from the new star.",
+      "No way to edit importance after a task is created."
+    ],
+    "check": "npm run setup (or the app's existing setup script) resets the seed DB, then start the app, add a task with 'Important' checked and one without; confirm only the first shows a ★, existing done-toggle and list behavior are unaffected.",
+    "journey": "add-important-task",
+    "reviewFocus": "Verify the important flag is persisted correctly via the API/DB, the star only renders when the flag is true, and no existing task behavior (done toggle, ordering, seed data) is altered."
+  },
+  "findings": [
+    {
+      "path": "public/app.js",
+      "note": "toListItem() builds each list item; will need to append a ★ span when task.important is true. Form submit handler builds POST body from titleInput.value; needs to also read a new important checkbox and include it in the JSON body, then reset the checkbox alongside titleInput."
+    },
+    {
+      "path": "public/index.html",
+      "note": "The #new-task form only has a title input and Add button; needs a new checkbox input (e.g. #important) with a visible label."
+    },
+    {
+      "path": "server.js",
+      "note": "POST /api/tasks only inserts title and hardcodes done=0; needs to also accept and store an optional important flag. GET/PATCH responses already return full rows via SELECT *, so a new column will flow through automatically once added to the schema."
+    },
+    {
+      "path": "db/seed.js",
+      "note": "CREATE TABLE tasks defines columns id, title, done; needs a new 'important' column (INTEGER NOT NULL DEFAULT 0). Existing insert.run calls only pass title/done, so they'll default to not important, keeping seed data unchanged."
+    },
+    {
+      "path": "public/style.css",
+      "note": "No existing style for a star/badge; a minimal inline star character avoids needing new CSS, but a tiny style rule could be added if visual polish is desired (kept optional/minimal per user request)."
+    }
+  ],
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarified",
+      "at": "2026-09-23T22:18:36.907Z"
+    }
+  ],
+  "artifacts": {},
+  "approval": {
+    "sessionId": "edf96209-dfcb-4cc6-ba63-a171df513480",
+    "revision": 1,
+    "at": "2026-09-23T22:18:36.907Z",
+    "specHash": "17aaf59d9851cd76c566019dbb8447bc8d03af51ef60dfeb8e95443c86a1e3e1"
+  }
+}
