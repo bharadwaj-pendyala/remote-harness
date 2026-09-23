@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: run id, as run-<issue number>
+        description: approved run id
         required: true
       mode:
         description: answer, execute, or repair
@@ -23,8 +23,43 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: harness-${{ inputs.run_id }}
+  cancel-in-progress: false
+
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.gate.outputs.allowed }}
+      baseCommit: ${{ steps.gate.outputs.baseCommit }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: validate dispatch inputs
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          MODE: ${{ inputs.mode }}
+        run: node harness/gate.mjs validate
+      - name: read the current record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECORD_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: node harness/record.mjs pull "$RUN_ID"
+      - id: gate
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          MODE: ${{ inputs.mode }}
+          RUNS_DIR: ${{ github.workspace }}/runs
+        run: node harness/gate.mjs
+
   work:
+    needs: gate
+    if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,6 +76,7 @@ jobs:
           repository: ${{ vars.APP_REPO }}
           path: app
           fetch-depth: 0
+          ref: ${{ needs.gate.outputs.baseCommit }}
 
       - uses: actions/setup-node@v5
         with:
@@ -53,27 +89,6 @@ jobs:
           RECORD_REPO: ${{ github.repository }}
           RUNS_DIR: ${{ github.workspace }}/runs
         run: node harness/record.mjs pull "${{ inputs.run_id }}"
-
-      - uses: actions/cache@v4
-        if: inputs.mode != 'answer'
-        with:
-          path: |
-            app/node_modules
-            ~/.cache/ms-playwright
-          key: app-${{ hashFiles('app/package-lock.json') }}
-
-      - name: install the video encoder
-        if: inputs.mode != 'answer' && inputs.fast != 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-
-      - name: set the application up
-        if: inputs.mode != 'answer'
-        working-directory: app
-        run: |
-          ./scripts/setup-app
-          npx playwright install --with-deps chromium
-
-      - run: npm i -g @anthropic-ai/claude-code
 
       - name: fetch the failing candidate
         if: inputs.mode == 'repair'
@@ -95,6 +110,30 @@ jobs:
           git fetch "${{ github.workspace }}/runs/${{ inputs.run_id }}/candidate.bundle" \
             "harness/${{ inputs.run_id }}:harness/${{ inputs.run_id }}"
           git checkout -q "harness/${{ inputs.run_id }}"
+
+      - uses: actions/cache@v4
+        if: inputs.mode != 'answer'
+        with:
+          path: |
+            app/node_modules
+            ~/.cache/ms-playwright
+          key: app-${{ hashFiles('app/package-lock.json') }}
+
+      - name: install the video encoder
+        if: inputs.mode != 'answer' && inputs.fast != 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: set the application up
+        if: inputs.mode != 'answer'
+        working-directory: app
+        run: |
+          ./scripts/setup-app
+          npx playwright install --with-deps chromium
+
+      - run: npm ci
+        working-directory: harness
+
+      - run: npm i -g @anthropic-ai/claude-code
 
       - name: run the agent
         working-directory: harness
@@ -166,6 +205,12 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.APP_REPO_TOKEN }}
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: harness
+
       - uses: actions/download-artifact@v4
         with:
           name: record
@@ -200,8 +245,8 @@ jobs:
           path: runs/
 
   route:
-    needs: [work, publish]
-    if: always()
+    needs: [gate, work, publish]
+    if: always() && needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -221,23 +266,24 @@ jobs:
           name: ${{ needs.publish.result == 'success' && 'published' || 'record' }}
           path: runs
 
-      - name: read the record when the stage produced nothing
-        if: needs.work.result != 'success'
+      - run: npm ci
+        working-directory: harness
+
+      - name: retain evidence and settle failures
         working-directory: harness
         env:
           GH_TOKEN: ${{ github.token }}
           RECORD_REPO: ${{ github.repository }}
           RUNS_DIR: ${{ github.workspace }}/runs
+          RUN_ID: ${{ inputs.run_id }}
+          MODE: ${{ inputs.mode }}
+          WORK_RESULT: ${{ needs.work.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
         run: |
-          node harness/record.mjs pull "${{ inputs.run_id }}"
-          node -e "
-            const path = '${{ github.workspace }}/runs/${{ inputs.run_id }}/run.json';
-            const record = JSON.parse(require('fs').readFileSync(path, 'utf8'));
-            record.state = 'stopped';
-            record.reason = 'the ${{ inputs.mode }} stage failed, see the workflow log';
-            record.history.push({ state: 'stopped', at: new Date().toISOString() });
-            require('fs').writeFileSync(path, JSON.stringify(record, null, 2));
-          "
+          if [ ! -f "$RUNS_DIR/$RUN_ID/run.json" ]; then
+            node harness/record.mjs pull "$RUN_ID"
+          fi
+          node harness/gate.mjs settle
 
       - name: write the record
         working-directory: harness
@@ -261,7 +307,8 @@ jobs:
               if [ "$left" -gt 0 ]; then
                 echo "${state}, ${left} repair attempts left, dispatching a repair"
                 gh workflow run execute.yml --repo "${{ github.repository }}" \
-                  -f run_id="${{ inputs.run_id }}" -f mode=repair
+                  --ref "${{ github.ref_name }}" \
+                  -f run_id="${{ inputs.run_id }}" -f mode=repair -f fast="${{ inputs.fast }}"
               else
                 echo "${state} and the repair budget is spent, the run stops here"
               fi
