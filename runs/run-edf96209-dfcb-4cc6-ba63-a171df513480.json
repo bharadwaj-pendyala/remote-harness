@@ -1,7 +1,7 @@
 {
   "id": "run-edf96209-dfcb-4cc6-ba63-a171df513480",
   "request": "implement important label for added tasks",
-  "state": "clarified",
+  "state": "stopped",
   "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
   "spec": {
     "title": "Star mark for important tasks",
@@ -52,6 +52,14 @@
     {
       "state": "clarified",
       "at": "2026-09-23T22:18:36.907Z"
+    },
+    {
+      "state": "prepared",
+      "at": "2026-09-23T22:19:39.425Z"
+    },
+    {
+      "state": "stopped",
+      "at": "2026-09-23T22:21:53.798Z"
     }
   ],
   "artifacts": {},
@@ -60,5 +68,9 @@
     "revision": 1,
     "at": "2026-09-23T22:18:36.907Z",
     "specHash": "17aaf59d9851cd76c566019dbb8447bc8d03af51ef60dfeb8e95443c86a1e3e1"
-  }
+  },
+  "branch": "harness/run-edf96209-dfcb-4cc6-ba63-a171df513480",
+  "port": 36979,
+  "actionsRunId": "35927612667",
+  "reason": "The worker stage failed; see the workflow log."
 }
