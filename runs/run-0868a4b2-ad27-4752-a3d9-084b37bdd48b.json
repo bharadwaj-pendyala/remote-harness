@@ -1,0 +1,61 @@
+{
+  "id": "run-0868a4b2-ad27-4752-a3d9-084b37bdd48b",
+  "request": "lets add a new feature called important label",
+  "state": "clarified",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "spec": {
+    "title": "Add persistent Important label to tasks",
+    "summary": "Introduce an 'important' flag on tasks that users can toggle from the task list, persisted in the database, with a distinct visual indicator for important tasks.",
+    "acceptance": [
+      "Each task in the list has a toggle control (e.g., a star button) that marks/unmarks it as important.",
+      "Toggling the important control immediately persists the new state via the API and survives a page reload.",
+      "Tasks marked important are visually distinguished in the list (e.g., a highlight style or 'Important' label class), similar to how completed tasks show the 'done' style.",
+      "GET /api/tasks returns the 'important' field for every task.",
+      "PATCH /api/tasks/:id accepts an 'important' boolean and updates only that field when provided, without altering 'done' or 'title'.",
+      "Newly created tasks default to important = false.",
+      "Existing seeded tasks (Task A, Task B, Renew the domain) load with important = false by default after a fresh db/seed.js run."
+    ],
+    "unchanged": [
+      "Task creation flow (title input + Add button) is unchanged; no new fields are added to the creation form.",
+      "Existing 'done' toggle behavior and styling remain exactly as they are today.",
+      "No filtering, sorting, or search behavior is introduced for important tasks.",
+      "API routes and response shapes for existing fields (id, title, done) remain unchanged aside from the added 'important' field.",
+      "No changes to server port, static file serving, or health check endpoint."
+    ],
+    "check": "Run the app (scripts/start-app or equivalent), load the task list, click the important toggle on a task, confirm it visually changes and reload the page to confirm the state persisted. Also verify GET /api/tasks and PATCH /api/tasks/:id in server.js correctly include/update the important field, and db/seed.js creates the tasks table with an important column defaulting to 0.",
+    "journey": "important-label",
+    "reviewFocus": "Verify the SQLite schema migration/seed adds the important column correctly, the PATCH endpoint only updates fields explicitly provided in the request body (doesn't reset done or important unintentionally), and the front-end toggle control is accessible (proper aria-label) and updates the DOM/style correctly after persistence."
+  },
+  "findings": [
+    {
+      "path": "server.js",
+      "note": "PATCH /api/tasks/:id currently only handles req.body.done; needs to also handle req.body.important as an independent optional boolean update."
+    },
+    {
+      "path": "db/seed.js",
+      "note": "tasks table schema needs an 'important INTEGER NOT NULL DEFAULT 0' column added; INSERT statements can stay at 2 args (title, done) if important defaults via schema, or be extended to 3 args explicitly set to 0."
+    },
+    {
+      "path": "public/app.js",
+      "note": "toListItem() builds each <li> with a done checkbox; add a similar toggle element (e.g., a star button) wired to a new toggleImportant(id, important) function calling PATCH, and apply a conditional class for the important state."
+    },
+    {
+      "path": "public/style.css",
+      "note": "Not yet reviewed in detail; will need a new style rule for the important state/class (e.g., .important) to visually distinguish the task item."
+    }
+  ],
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarified",
+      "at": "2026-09-23T23:52:13.298Z"
+    }
+  ],
+  "artifacts": {},
+  "approval": {
+    "sessionId": "0868a4b2-ad27-4752-a3d9-084b37bdd48b",
+    "revision": 1,
+    "at": "2026-09-23T23:52:13.298Z",
+    "specHash": "7e9ba3d43f10d825f9f20393ec2f8b695e7dfb17a278d6f58d05571c49cb026a"
+  }
+}
