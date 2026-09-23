@@ -1,0 +1,60 @@
+{
+  "id": "run-c2b0f373-e71b-40a4-84a3-f2c16fc92842",
+  "request": "kick off add an important label to the app",
+  "state": "clarified",
+  "baseCommit": "ad3ceb07eb3d5ee14bfe960e2ba8466f5fdd2446",
+  "spec": {
+    "title": "Add persisted important star to tasks",
+    "summary": "Add an 'important' flag to each task that users can toggle by clicking a star (★) next to the task title, similar to the existing done checkbox. The flag is persisted in the database (new `important` column on the tasks table) and survives page reloads and server restarts. No filtering, sorting, or additional styling is included — just the star toggle and its persisted state.",
+    "acceptance": [
+      "Each task in the list shows a star control next to its title.",
+      "Clicking the star toggles the task's important state and the star visually reflects on/off state (e.g., filled vs. outline star or similar simple indicator).",
+      "Toggling the star persists the change via the API (new field on the task, saved to the database), and reloading the page shows the correct star state for every task.",
+      "Newly created tasks default to not important (star off/empty).",
+      "Existing task data (title, done state) is unaffected by this change.",
+      "The done checkbox and its behavior continue to work exactly as before."
+    ],
+    "unchanged": [
+      "Task creation flow (title input + Add button) behaves the same.",
+      "Done checkbox toggle behavior and styling for completed tasks (.done class) is unchanged.",
+      "No filtering or sorting of tasks by important status is introduced.",
+      "No new pages, routes, or navigation are added.",
+      "API endpoints for listing and creating tasks keep their existing shape aside from the added `important` field."
+    ],
+    "check": "Load the app, add a new task, click its star to mark it important, reload the page and confirm the star remains on; click it again to unmark, reload and confirm it's off; verify the done checkbox still works independently of the star.",
+    "journey": "mark-task-important",
+    "reviewFocus": "Confirm the `important` column is added via a migration/seed update, the PATCH endpoint accepts and persists the `important` boolean alongside `done`, the star toggle in app.js mirrors the existing checkbox toggle pattern, and no unrelated styling/filtering logic was introduced."
+  },
+  "findings": [
+    {
+      "path": "public/app.js",
+      "note": "toggleDone() and the checkbox in toListItem() show the pattern to mirror for a star toggle: create a control, wire a change/click listener that PATCHes the task and re-renders."
+    },
+    {
+      "path": "server.js",
+      "note": "PATCH /api/tasks/:id currently only accepts `done` (boolean). Needs to also accept and persist `important` (boolean), similar to how `done` is handled."
+    },
+    {
+      "path": "db/seed.js",
+      "note": "tasks table schema (id, title, done) needs a new `important INTEGER NOT NULL DEFAULT 0` column; seed inserts should be updated accordingly."
+    },
+    {
+      "path": "public/index.html",
+      "note": "No structural change expected here beyond what app.js renders into the existing #tasks list."
+    }
+  ],
+  "repairsLeft": 1,
+  "history": [
+    {
+      "state": "clarified",
+      "at": "2026-09-23T22:21:39.777Z"
+    }
+  ],
+  "artifacts": {},
+  "approval": {
+    "sessionId": "c2b0f373-e71b-40a4-84a3-f2c16fc92842",
+    "revision": 1,
+    "at": "2026-09-23T22:21:39.777Z",
+    "specHash": "ebd2629ee165bb2f6b6a06c41dcf7b5de6cfeb48ff65656ae96fd7cc03175eef"
+  }
+}
