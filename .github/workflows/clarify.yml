@@ -36,9 +36,6 @@ jobs:
         with:
           node-version: 22
 
-      - run: npm ci
-        working-directory: harness
-
       - run: npm i -g @anthropic-ai/claude-code
 
       - name: ask the questions
