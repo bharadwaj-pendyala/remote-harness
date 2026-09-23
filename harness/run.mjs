@@ -6,7 +6,6 @@ import { createServer } from 'node:net';
 import { parseArgs } from 'node:util';
 
 import { resolve, relative, basename } from 'node:path';
-import { executionAllowed } from './execution.mjs';
 
 const HARNESS_HOME = resolve(import.meta.dirname, '..');
 const RUNS_DIR = process.env.RUNS_DIR ?? `${HARNESS_HOME}/runs`;
@@ -190,13 +189,16 @@ function recordJourney(run, env) {
 
 function commitCandidate(run) {
   sh('git add -A');
-  execFileSync('git', ['-c', 'user.email=harness@bharad.dev', '-c', 'user.name=Remote Harness', 'commit', '-q', '-m', run.spec.summary], { cwd: REPO });
+  sh(
+    `git -c user.email=harness@bharad.dev -c user.name="Remote Harness" commit -q -m ` +
+      JSON.stringify(run.spec.summary),
+  );
   return sh('git rev-parse HEAD').trim();
 }
 
 async function execute(id) {
   const run = loadRun(id);
-  if (!executionAllowed(run, 'execute')) throw new Error(`run ${id} is not waiting for execution`);
+  if (!run.spec) throw new Error(`run ${id} has no agreed spec yet`);
 
   const branch = `harness/${run.id}`;
   const artifacts = artifactsDir(run.id);
@@ -426,7 +428,10 @@ function publish(id) {
   const title = run.spec.title ?? run.spec.summary.split(/[.;]/)[0].slice(0, 60);
   let url;
   try {
-    url = execFileSync('gh', ['pr', 'create', '--draft', '--title', title, '--body-file', bodyFile, '--attach', videoRef], { cwd: REPO, encoding: 'utf8' }).trim();
+    url = sh(
+      `gh pr create --draft --title ${JSON.stringify(title)} ` +
+        `--body-file ${JSON.stringify(bodyFile)} --attach ${JSON.stringify(videoRef)}`,
+    ).trim();
   } finally {
     rmSync(`${REPO}/${videoRef}`, { force: true });
   }

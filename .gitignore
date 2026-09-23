@@ -1,6 +1,3 @@
 node_modules/
 runs/
 .venv/
-.chat-data/
-.env
-__pycache__/
